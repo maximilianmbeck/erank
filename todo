@@ -1,0 +1,17 @@
+
+
+- load mnist dataset
+- write mnist training loop
+- implement erank
+- use torch utils from rlalgs
+- 
+
+
+
+- do experiments:
+  - what happens when I add erank in supervised learning?
+  - How does erank of training trajectory evolve over time?
+  - 
+
+
+- reimplement with pytorch lightning
