@@ -22,14 +22,29 @@ notes: # str, used to make notes to wandblogger
 model:
   name: fc
   model_kwargs:
+    input_size: 784
+    hidden_sizes:
+      - 512
+      - 512
+    output_size: 10
+    flatten_input: true
+    dropout: 0.2
+    act_fn: relu
+
 
 
 trainer:
-  epochs: 10
-  batchsize: 256
-  optimizer: sgd
-  optimizer_kwargs:
-    lr: 0.001
+  n_epochs: 5
+  val_every: 1
+  save_every: 5
+  early_stopping_patience: 5
+  batch_size: 256
+  optimizer_scheduler:
+    optimizer_name: sgd
+    optimizer_kwargs:
+      lr: 0.001
+    
+  
   num_workers: 4
   
 
