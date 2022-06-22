@@ -1,9 +1,8 @@
 
 
-- load mnist dataset
-- write mnist training loop
-- implement erank
-- use torch utils from rlalgs
+- load mnist dataset        done  
+- write mnist training loop done  
+- implement erank           
 - 
 
 
@@ -14,4 +13,4 @@
   - 
 
 
-- reimplement with pytorch lightning
+- (reimplement with pytorch lightning)

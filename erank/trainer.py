@@ -5,6 +5,7 @@ import torchmetrics
 import torch.utils.data as data
 import torchvision
 import torchvision.transforms as transforms
+import pandas as pd
 from tqdm import tqdm
 from torch import nn
 from omegaconf import OmegaConf
@@ -93,18 +94,24 @@ class Trainer(BaseTrainer):
             with torch.no_grad():
                 for metric in self._metrics:
                     metric_vals[metric._get_name()] = metric(y_pred, ys).item()
+            
+            # log step
+            wandb.log({'train_step/': {'epoch': epoch, 'train_step': self._train_step, 'loss': loss.item(), **metric_vals}})
+        
+        # log epoch
+        for metric in self._metrics:
+            metric_vals[metric._get_name()] = metric.compute().item()
 
-            wandb.log({'train': {'epoch': epoch, 'train_step': self._train_step, 'loss': loss.item(), **metric_vals}})
+        log_dict = {'epoch': epoch, 'train_step': self._train_step, 'loss': torch.tensor(losses).mean().item(), **metric_vals}
+        wandb.log({'train_epoch/': log_dict})
 
-        # wandb.log({'epoch': epoch, 'train_step': self._train_step, 'loss': torch.tensor(losses).mean()})
+        LOGGER.info(f'Train epoch \n{pd.Series(log_dict)}')
 
         self._reset_metrics()
 
     def _val_epoch(self, epoch: int, trained_model: nn.Module) -> float:
 
         metric_vals = dict()
-        for metric in self._metrics:
-            metric_vals[metric._get_name()] = []
         val_losses = []
 
         pbar = tqdm(self._loaders['val'], desc=f'Val epoch {epoch}')
@@ -117,16 +124,20 @@ class Trainer(BaseTrainer):
                 loss = self._loss(y_pred, ys)
                 val_losses.append(loss.item())
                 for metric in self._metrics:
-                    metric_vals[metric._get_name()].append(metric(y_pred, ys).item())
+                    m_val = metric(y_pred, ys)
 
         # compute mean metrics over dataset
         for metric in self._metrics:
-            metric_vals[metric._get_name()] = torch.tensor(metric_vals[metric._get_name()]).mean(dim=0)
+            metric_vals[metric._get_name()] = metric.compute().item()
 
-        wandb.log({'val': {'epoch': epoch, 'loss': torch.tensor(val_losses).mean(), **metric_vals}})
+        # log epoch
+        log_dict = {'epoch': epoch, 'loss': torch.tensor(val_losses).mean().item(), **metric_vals}
+        wandb.log({'val/': log_dict})
+
+        LOGGER.info(f'Val epoch \n{pd.Series(log_dict)}')
 
         # val_score is first metric in self._metrics
-        val_score = metric_vals[self._metrics[0]._get_name()].item()
+        val_score = metric_vals[self._metrics[0]._get_name()]
         
         self._reset_metrics()
         return val_score
