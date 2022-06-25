@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 LOGGER = logging.getLogger(__name__)
 
-def load_model_from_epoch(run_path: Union[str, Path], epoch: int) -> BaseModel:
+def load_model_from_epoch(run_path: Union[str, Path], epoch: int, device: Union[torch.device, str, int] = "auto") -> BaseModel:
     if isinstance(run_path, str):
         run_path = Path(run_path)
     # load config
@@ -20,10 +20,10 @@ def load_model_from_epoch(run_path: Union[str, Path], epoch: int) -> BaseModel:
     model_name = config.model.name
     model_class = get_model_class(model_name)
 
-    model = model_class.load(run_path, model_class.model_save_name(epoch))
+    model = model_class.load(run_path, model_class.model_save_name(epoch), device=device)
     return model
 
-def load_best_model(run_path: Union[str, Path]) -> BaseModel:
+def load_best_model(run_path: Union[str, Path], device: Union[torch.device, str, int] = "auto") -> BaseModel:
     # get best epoch
     best_epoch_file = run_path / 'best_epoch.txt'
     if not best_epoch_file.exists():
@@ -32,11 +32,11 @@ def load_best_model(run_path: Union[str, Path]) -> BaseModel:
     with best_epoch_file.open('r') as f:
         best_epoch = int(f.read())
 
-    model = load_model_from_epoch(run_path, best_epoch)
+    model = load_model_from_epoch(run_path, best_epoch, device=device)
     return model
 
 
-def load_directions_matrix_from_task_sweep(path_to_runs: Union[str, Path]) -> torch.Tensor:
+def load_directions_matrix_from_task_sweep(path_to_runs: Union[str, Path], device: Union[torch.device, str, int] = "auto") -> torch.Tensor:
     if isinstance(path_to_runs, str):
         path_to_runs = Path(path_to_runs)
     
@@ -48,14 +48,15 @@ def load_directions_matrix_from_task_sweep(path_to_runs: Union[str, Path]) -> to
     for run_path in pbar:
         pbar.set_description_str(f'Loading {run_path}')
 
-        best_model = load_best_model(run_path)
-        init_model = load_model_from_epoch(run_path, 0)
+        best_model = load_best_model(run_path, device=device)
+        init_model = load_model_from_epoch(run_path, 0, device=device)
 
         # compute direction vec
-        best_model_vec = nn.utils.parameters_to_vector(best_model.parameters())
-        init_model_vec = nn.utils.parameters_to_vector(init_model.parameters())
+        with torch.no_grad():
+            best_model_vec = nn.utils.parameters_to_vector(best_model.parameters())
+            init_model_vec = nn.utils.parameters_to_vector(init_model.parameters())
 
-        direction = best_model_vec - init_model_vec
+            direction = best_model_vec - init_model_vec
         directions.append(direction)
     
     directions_matrix = torch.stack(directions)

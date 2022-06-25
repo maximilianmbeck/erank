@@ -35,7 +35,7 @@ class Trainer(BaseTrainer):
                          save_every=config.trainer.save_every,
                          early_stopping_patience=config.trainer.early_stopping_patience)
         #
-        self._erank_regularizer : EffectiveRankRegularization = None
+        self._erank_regularizer: EffectiveRankRegularization = None
 
     def _setup(self):
         LOGGER.info('Starting wandb.')
@@ -92,14 +92,15 @@ class Trainer(BaseTrainer):
             LOGGER.info('No erank regularizer.')
         elif erank_cfg.type in ['random', 'pretraindiff']:
             LOGGER.info(f'Erank regularization of type {erank_cfg.type}.')
-            erank_reg = EffectiveRankRegularization(buffer_size=erank_cfg.buffer_size, init_model=self._model, loss_weight=erank_cfg.loss_weight)
+            erank_reg = EffectiveRankRegularization(
+                buffer_size=erank_cfg.buffer_size, init_model=self._model, loss_weight=erank_cfg.loss_weight)
             if erank_cfg.type == 'random':
                 erank_reg.init_directions_buffer(random_buffer=True)
             elif erank_cfg.type == 'pretraindiff':
                 erank_reg.init_directions_buffer(path_to_buffer_or_runs=erank_cfg.dir_buffer)
         else:
             raise ValueError('Unknown erank type.')
-        
+
         self._erank_regularizer = erank_reg
 
     def _create_metrics(self) -> None:
@@ -107,7 +108,7 @@ class Trainer(BaseTrainer):
         self._metrics = [torchmetrics.Accuracy()]
 
     def _train_epoch(self, epoch: int) -> None:
-        losses = []
+        loss_vals = dict(loss_total=[], loss_ce=[], loss_erank=[])
         metric_vals = dict()
 
         pbar = tqdm(self._loaders['train'], desc=f'Train epoch {epoch}')
@@ -119,12 +120,15 @@ class Trainer(BaseTrainer):
             loss = self._loss(y_pred, ys)
 
             # add erank regularizer
+            loss_reg = torch.tensor(0.0).to(loss)
             if self._erank_regularizer is not None:
-                loss = loss + self._erank_regularizer(self._model)
+                loss_reg = self._erank_regularizer.forward(self._model)
+
+            loss_total = loss + loss_reg
 
             # backward pass
             self._optimizer.zero_grad()
-            loss.backward()
+            loss_total.backward()
             self._optimizer.step()
             self._train_step += 1
 
@@ -133,20 +137,27 @@ class Trainer(BaseTrainer):
                 self._erank_regularizer.update_delta_start_params(self._model)
 
             # metrics & logging
-            losses.append(loss.item())
+            loss_log = dict(loss_total=loss_total.item(), loss_ce=loss.item(), loss_erank=loss_reg.item())
+
+            for loss_name in loss_vals:
+                loss_vals[loss_name] = loss_log[loss_name]
             with torch.no_grad():
                 for metric in self._metrics:
                     metric_vals[metric._get_name()] = metric(y_pred, ys).item()
 
             # log step
-            wandb.log({'train_step/': {'epoch': epoch, 'train_step': self._train_step, 'loss': loss.item(), **metric_vals}})
+            wandb.log({'train_step/': {'epoch': epoch, 'train_step': self._train_step,
+                      **loss_vals, **metric_vals}})
 
         # log epoch
         for metric in self._metrics:
             metric_vals[metric._get_name()] = metric.compute().item()
 
+        for loss_name, loss_val_list in loss_vals.items():
+            loss_vals[loss_name] = torch.tensor(loss_val_list).mean().item()
+
         log_dict = {'epoch': epoch, 'train_step': self._train_step,
-                    'loss': torch.tensor(losses).mean().item(), **metric_vals}
+                    **loss_vals, **metric_vals}
         wandb.log({'train_epoch/': log_dict})
 
         LOGGER.info(f'Train epoch \n{pd.Series(log_dict)}')

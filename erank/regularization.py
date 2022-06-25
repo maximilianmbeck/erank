@@ -1,3 +1,4 @@
+from collections import deque
 from pathlib import Path
 import torch
 import logging
@@ -27,7 +28,9 @@ class EffectiveRankRegularization(nn.Module):
         # it has shape: buffer_size x n_params of the model
         self._directions_buffer = torch.tensor([], device=self._device)
         # the params to compute the delta of the current model step to
-        self._delta_start_params = nn.utils.parameters_to_vector(init_model.parameters()).detach()
+        self._delta_start_params_queue = deque(maxlen=2)
+        self._delta_start_params_queue.append(nn.utils.parameters_to_vector(init_model.parameters()).detach())
+
 
     def update_delta_start_params(self, model: nn.Module) -> None:
         """Updates the start vector to which the delta of the next parameter update of the model will be computed
@@ -35,7 +38,7 @@ class EffectiveRankRegularization(nn.Module):
         Args:
             model (nn.Module): The model containing the parameters.
         """
-        self._delta_start_params = nn.utils.parameters_to_vector(model.parameters()).detach()
+        self._delta_start_params_queue.append(nn.utils.parameters_to_vector(model.parameters()).detach())
 
     def update_directions_buffer(self, model: nn.Module) -> None:
         # FIFO queue for _directions_buffer
@@ -43,14 +46,14 @@ class EffectiveRankRegularization(nn.Module):
 
     def init_directions_buffer(self, path_to_buffer_or_runs: str = '', random_buffer: bool = False) -> None:
         if random_buffer:
-            n_model_params = self._delta_start_params.shape[0]
-            directions_buffer = torch.normal(mean=0, std=1, size=(self.buffer_size, n_model_params))
+            n_model_params = self._delta_start_params_queue.shape[0]
+            directions_buffer = torch.normal(mean=0, std=1, size=(self.buffer_size, n_model_params), device=self._device)
         else:
             assert path_to_buffer_or_runs
             load_path = Path(path_to_buffer_or_runs)
             if load_path.is_dir():
-                directions_buffer = load_directions_matrix_from_task_sweep(load_path)
-                LOGGER.info(f'Loaded erank directions from run dir {directions_buffer} (shape {directions_buffer.shape}).')
+                directions_buffer = load_directions_matrix_from_task_sweep(load_path, device=self._device)
+                LOGGER.info(f'Loaded erank directions from run dir {path_to_buffer_or_runs} (shape {directions_buffer.shape}).')
             else:
                 raise NotImplementedError('Loading file not supported yet')
 
@@ -60,8 +63,8 @@ class EffectiveRankRegularization(nn.Module):
 
     def _construct_directions_matrix(self, model: nn.Module) -> torch.Tensor:
         delta_end_params = nn.utils.parameters_to_vector(model.parameters()) # not detached!
-        delta = delta_end_params - self._delta_start_params
-        directions_matrix = torch.cat([delta, self._directions_buffer], dim=0)
+        delta = delta_end_params - self._delta_start_params_queue[0]
+        directions_matrix = torch.cat([delta.unsqueeze(dim=0), self._directions_buffer], dim=0) # shape: (n_directions, n_model_parameters)
         return directions_matrix
 
     def forward(self, model: nn.Module) -> torch.Tensor:
@@ -73,7 +76,7 @@ class EffectiveRankRegularization(nn.Module):
         Returns:
             torch.Tensor: Effective Rank regularization term.
         """
-        if self._directions_buffer < self.buffer_size:
+        if self._directions_buffer.shape[0] < self.buffer_size or len(self._delta_start_params_queue) < 2:
             return torch.tensor(0.0, dtype=torch.float32, device=self._device)
         directions_matrix = self._construct_directions_matrix(model)
         return self.loss_weight * EffectiveRankRegularization.erank(directions_matrix)
