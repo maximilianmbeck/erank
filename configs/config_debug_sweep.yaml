@@ -13,7 +13,7 @@ hydra:
 run_config:
   exec_type: parallel # sequential
   gpu_ids: [2,3]
-  runs_per_gpu: 4
+  runs_per_gpu: 5
 
 seeds: 
   - 0
@@ -28,7 +28,7 @@ sweep:
 config:
   experiment_data:
     project_name: erank_supervised
-    experiment_name: f_mnist-reproduce_same_seed
+    experiment_name: f_mnist-DEBUG_SWEEP-taskidx${config.data.train_task_idx}
     experiment_dir: null
     seed: 0
     gpu_id: 2
@@ -60,10 +60,6 @@ config:
       optimizer_name: adam
       optimizer_kwargs:
         lr: 0.001
-    erank:
-      type: none
-      dir_buffer: /system/user/beck/pwbeck/projects/regularization/erank/outputs/240622_083655_f_mnist-same_init3-taskidxXXX/outputs
-      buffer_size: 10 # number of directions stored in the buffer
     init_model: /system/user/beck/pwbeck/projects/regularization/erank/res/init_model.p
 
     num_workers: 4
@@ -74,7 +70,7 @@ config:
     dataset_dir: /system/user/beck/pwbeck/data/mnist
     train_val_split: 0.8
     num_train_tasks: 12
-    train_task_idx: 0
+    train_task_idx: XXX
     normalizer: # mean and std per channel
       mean:
         - 0.2860
