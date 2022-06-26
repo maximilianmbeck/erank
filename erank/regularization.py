@@ -19,10 +19,11 @@ class EffectiveRankRegularization(nn.Module):
         .. [#] Roy, Olivier, and Martin Vetterli. "The effective rank: A measure of effective dimensionality."
                2007 15th European Signal Processing Conference. IEEE, 2007.
     """
-    def __init__(self, buffer_size: int, init_model: nn.Module, loss_weight: float):
+    def __init__(self, buffer_size: int, init_model: nn.Module, loss_weight: float, normalize_directions: bool = False):
         self.buffer_size = buffer_size # number of directions in the buffer
         self.loss_weight = loss_weight # weighting parameter in the loss (will be multiplied with erank term)
         self._device = next(iter(init_model.parameters())).device
+        self._normalize_directions = normalize_directions
 
         # directions buffer is a tensor containing all directions that span the subspace
         # it has shape: buffer_size x n_params of the model
@@ -66,6 +67,8 @@ class EffectiveRankRegularization(nn.Module):
         delta_end_params = nn.utils.parameters_to_vector(model.parameters()) # not detached!
         delta = delta_end_params - self._delta_start_params_queue[0]
         directions_matrix = torch.cat([delta.unsqueeze(dim=0), self._directions_buffer], dim=0) # shape: (n_directions, n_model_parameters)
+        if self._normalize_directions:
+            directions_matrix = directions_matrix / torch.linalg.norm(directions_matrix, ord=2, dim=1, keepdim=True)
         return directions_matrix
 
     def forward(self, model: nn.Module) -> torch.Tensor:
