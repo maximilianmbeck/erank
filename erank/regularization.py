@@ -28,6 +28,7 @@ class EffectiveRankRegularization(nn.Module):
         # it has shape: buffer_size x n_params of the model
         self._directions_buffer = torch.tensor([], device=self._device)
         # the params to compute the delta of the current model step to
+        # We use a deque here as we want to compute the difference to the PREVIOUS step. Therefore we access the 0th element for computing the difference.
         self._delta_start_params_queue = deque(maxlen=2)
         self._delta_start_params_queue.append(nn.utils.parameters_to_vector(init_model.parameters()).detach())
 
@@ -46,7 +47,7 @@ class EffectiveRankRegularization(nn.Module):
 
     def init_directions_buffer(self, path_to_buffer_or_runs: str = '', random_buffer: bool = False) -> None:
         if random_buffer:
-            n_model_params = self._delta_start_params_queue.shape[0]
+            n_model_params = self._delta_start_params_queue[0].shape[0]
             directions_buffer = torch.normal(mean=0, std=1, size=(self.buffer_size, n_model_params), device=self._device)
         else:
             assert path_to_buffer_or_runs
@@ -76,6 +77,7 @@ class EffectiveRankRegularization(nn.Module):
         Returns:
             torch.Tensor: Effective Rank regularization term.
         """
+        # Apply erank regularization only if directions buffer is full and we have a first step in the delta_start_params_queue
         if self._directions_buffer.shape[0] < self.buffer_size or len(self._delta_start_params_queue) < 2:
             return torch.tensor(0.0, dtype=torch.float32, device=self._device)
         directions_matrix = self._construct_directions_matrix(model)

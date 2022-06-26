@@ -40,8 +40,10 @@ class Trainer(BaseTrainer):
     def _setup(self):
         LOGGER.info('Starting wandb.')
         exp_data = self.config.experiment_data
+        # add wandb config: need to convert to python native dict
         wandb.init(project=exp_data.project_name, name=HydraConfig.get().job.name, dir=Path.cwd(),
-                   config=self.config, tags=self.config.tags, notes=self.config.notes)
+                   config=OmegaConf.to_container(self.config, resolve=True, throw_on_missing=True),
+                   tags=self.config.tags, notes=self.config.notes)
 
     def _create_datasets(self) -> None:
         # create fashion mnist datasets

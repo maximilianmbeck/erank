@@ -21,12 +21,16 @@ def random_split_train_tasks(dataset: data.Dataset, num_train_tasks: int = 1, tr
     assert train_task_idx >= 0 and train_task_idx < num_train_tasks, 'Invalid train_task_idx given.'
 
     n_train_samples = int(train_val_split * len(dataset))
-    n_val_samples = len(dataset) - n_train_samples
 
     n_samples_per_task = int(n_train_samples / num_train_tasks)
 
-    split_lengths = num_train_tasks * [n_samples_per_task] + [n_val_samples]
+    train_split_lengths = num_train_tasks * [n_samples_per_task]
 
+    # make sure that sum of all splits equal total number of samples in dataset
+    # n_val_samples can be greater than specified by train_val_split
+    n_val_samples = len(dataset) - torch.tensor(train_split_lengths).sum().item()
+
+    split_lengths = num_train_tasks * [n_samples_per_task] + [n_val_samples]
     data_splits = data.random_split(dataset, split_lengths, generator=torch.Generator().manual_seed(seed))
 
     # select train task split + val split
