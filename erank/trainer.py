@@ -95,7 +95,9 @@ class Trainer(BaseTrainer):
         elif erank_cfg.type in ['random', 'pretraindiff']:
             LOGGER.info(f'Erank regularization of type {erank_cfg.type}.')
             erank_reg = EffectiveRankRegularization(
-                buffer_size=erank_cfg.buffer_size, init_model=self._model, loss_weight=erank_cfg.loss_weight, normalize_directions=erank_cfg.get('norm_directions', False))
+                buffer_size=erank_cfg.buffer_size, init_model=self._model, loss_weight=erank_cfg.loss_weight,
+                normalize_directions=erank_cfg.get('norm_directions', False),
+                use_abs_model_params=erank_cfg.get('use_abs_model_params', False))
             if erank_cfg.type == 'random':
                 erank_reg.init_directions_buffer(random_buffer=True)
             elif erank_cfg.type == 'pretraindiff':

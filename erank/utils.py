@@ -40,7 +40,7 @@ def load_directions_matrix_from_task_sweep(path_to_runs: Union[str, Path], devic
     if isinstance(path_to_runs, str):
         path_to_runs = Path(path_to_runs)
     
-    assert path_to_runs.is_dir(), f'Load path {path_to_runs} is no directory.'
+    assert path_to_runs.exists() and path_to_runs.is_dir(), f'Load path {path_to_runs} is no directory.'
 
     directions = []
 

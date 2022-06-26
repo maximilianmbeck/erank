@@ -64,8 +64,9 @@ config:
     erank:
       type: pretraindiff
       loss_weight: 1.0
-      dir_buffer: /system/user/beck/pwbeck/projects/regularization/erank/outputs/240622_083655_f_mnist-same_init3-taskidxXXX/outputs
+      dir_buffer: /system/user/beck/pwbeck/projects/regularization/erank/outputs/f_mnist-2.0-taskidxXXX_260622_110634/outputs
       buffer_size: 10 # number of directions stored in the buffer
+      use_abs_model_params: True
     num_workers: 4
 
   data: 
