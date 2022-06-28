@@ -104,7 +104,6 @@ class EffectiveRankRegularization(nn.Module):
         """
         assert matrix_A.ndim == 2
         _, s, _ = torch.pca_lowrank(matrix_A, center=center_matrix_A, niter=1, q=min(matrix_A.shape[0], matrix_A.shape[1]))
-        s = torch.square(s) / (s.shape[0] - 1)
 
         # normalizes input s -> scale independent!
         return torch.exp(torch.distributions.Categorical(s).entropy())
