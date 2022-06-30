@@ -10,7 +10,10 @@ from tqdm import tqdm
 
 LOGGER = logging.getLogger(__name__)
 
-def load_model_from_epoch(run_path: Union[str, Path], epoch: int, device: Union[torch.device, str, int] = "auto") -> BaseModel:
+
+def load_model_from_epoch(
+        run_path: Union[str, Path],
+        epoch: int, device: Union[torch.device, str, int] = "auto") -> BaseModel:
     if isinstance(run_path, str):
         run_path = Path(run_path)
     # load config
@@ -22,6 +25,7 @@ def load_model_from_epoch(run_path: Union[str, Path], epoch: int, device: Union[
 
     model = model_class.load(run_path, model_class.model_save_name(epoch), device=device)
     return model
+
 
 def load_best_model(run_path: Union[str, Path], device: Union[torch.device, str, int] = "auto") -> BaseModel:
     # get best epoch
@@ -36,10 +40,12 @@ def load_best_model(run_path: Union[str, Path], device: Union[torch.device, str,
     return model
 
 
-def load_directions_matrix_from_task_sweep(path_to_runs: Union[str, Path], device: Union[torch.device, str, int] = "auto") -> torch.Tensor:
+def load_directions_matrix_from_task_sweep(
+        path_to_runs: Union[str, Path],
+        device: Union[torch.device, str, int] = "auto", use_absolute_model_params: bool = False) -> torch.Tensor:
     if isinstance(path_to_runs, str):
         path_to_runs = Path(path_to_runs)
-    
+
     assert path_to_runs.exists() and path_to_runs.is_dir(), f'Load path {path_to_runs} is no directory.'
 
     directions = []
@@ -49,16 +55,19 @@ def load_directions_matrix_from_task_sweep(path_to_runs: Union[str, Path], devic
         pbar.set_description_str(f'Loading {run_path}')
 
         best_model = load_best_model(run_path, device=device)
-        init_model = load_model_from_epoch(run_path, 0, device=device)
-
-        # compute direction vec
         with torch.no_grad():
             best_model_vec = nn.utils.parameters_to_vector(best_model.parameters())
-            init_model_vec = nn.utils.parameters_to_vector(init_model.parameters())
+        
+        if not use_absolute_model_params:
+            init_model = load_model_from_epoch(run_path, 0, device=device)
+            # compute direction vec
+            with torch.no_grad():
+                init_model_vec = nn.utils.parameters_to_vector(init_model.parameters())
+                direction = best_model_vec - init_model_vec   
+        else:
+            direction = best_model_vec
 
-            direction = best_model_vec - init_model_vec
         directions.append(direction)
-    
+
     directions_matrix = torch.stack(directions)
     return directions_matrix
-    

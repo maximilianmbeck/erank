@@ -14,14 +14,25 @@ class EffectiveRankRegularization(nn.Module):
     For more information on effective rank, see [#]_.
 
     Args:
-        
+        buffer_size (int): Number of models in the directions matrix. 
+        init_model (nn.Module): Initialized model
+        loss_weight (float): The weighting factor of the Effective Rank regularization term.
+        normalize_directions (bool, optional): Normalized all model parameters in the directions matrix, 
+                                               i.e. all directions to 1 before computing the erank. Defaults to False.
+        use_abs_model_params (bool, optional): If true, use absolute model parameters in for the direction matrix. 
+                                               The models are stacked, i.e. each row contains the parameters of a model. Defaults to False.
+
+
     References:
         .. [#] Roy, Olivier, and Martin Vetterli. "The effective rank: A measure of effective dimensionality."
                2007 15th European Signal Processing Conference. IEEE, 2007.
     """
-    def __init__(self, buffer_size: int, init_model: nn.Module, loss_weight: float, normalize_directions: bool = False, use_abs_model_params: bool = False):
-        self.buffer_size = buffer_size # number of directions in the buffer
-        self.loss_weight = loss_weight # weighting parameter in the loss (will be multiplied with erank term)
+
+    def __init__(
+            self, buffer_size: int, init_model: nn.Module, loss_weight: float, normalize_directions: bool = False,
+            use_abs_model_params: bool = False):
+        self.buffer_size = buffer_size  # number of directions in the buffer
+        self.loss_weight = loss_weight  # weighting parameter in the loss (will be multiplied with erank term)
         self._device = next(iter(init_model.parameters())).device
         # types:
         self._normalize_directions = normalize_directions
@@ -35,6 +46,9 @@ class EffectiveRankRegularization(nn.Module):
         self._delta_start_params_queue = deque(maxlen=2)
         self._delta_start_params_queue.append(nn.utils.parameters_to_vector(init_model.parameters()).detach())
 
+    @property
+    def loss_coefficient(self):
+        return self.loss_weight
 
     def update_delta_start_params(self, model: nn.Module) -> None:
         """Updates the start vector to which the delta of the next parameter update of the model will be computed
@@ -51,27 +65,32 @@ class EffectiveRankRegularization(nn.Module):
     def init_directions_buffer(self, path_to_buffer_or_runs: str = '', random_buffer: bool = False) -> None:
         if random_buffer:
             n_model_params = self._delta_start_params_queue[0].shape[0]
-            directions_buffer = torch.normal(mean=0, std=1, size=(self.buffer_size, n_model_params), device=self._device)
+            directions_buffer = torch.normal(mean=0, std=1, size=(
+                self.buffer_size, n_model_params), device=self._device)
         else:
             assert path_to_buffer_or_runs
             load_path = Path(path_to_buffer_or_runs)
             if load_path.is_dir():
-                directions_buffer = load_directions_matrix_from_task_sweep(load_path, device=self._device)
-                LOGGER.info(f'Loaded erank directions from run dir {path_to_buffer_or_runs} (shape {directions_buffer.shape}).')
+
+                directions_buffer = load_directions_matrix_from_task_sweep(
+                    load_path, device=self._device, use_absolute_model_params=self._use_abs_model_params)
+                LOGGER.info(
+                    f'Loaded erank directions from run dir {path_to_buffer_or_runs} (shape {directions_buffer.shape}).')
             else:
                 raise NotImplementedError('Loading file not supported yet')
 
-        assert directions_buffer.shape[0] == self.buffer_size, f'Specified buffer size is {self.buffer_size}, but given directions_buffer as shape {directions_buffer.shape}.'
+        assert directions_buffer.shape[
+            0] == self.buffer_size, f'Specified buffer size is {self.buffer_size}, but given directions_buffer as shape {directions_buffer.shape}.'
         self._directions_buffer = directions_buffer
 
-
     def _construct_directions_matrix(self, model: nn.Module) -> torch.Tensor:
-        delta_end_params = nn.utils.parameters_to_vector(model.parameters()) # not detached!
+        delta_end_params = nn.utils.parameters_to_vector(model.parameters())  # not detached!
         if self._use_abs_model_params:
             delta = delta_end_params
         else:
             delta = delta_end_params - self._delta_start_params_queue[0]
-        directions_matrix = torch.cat([delta.unsqueeze(dim=0), self._directions_buffer], dim=0) # shape: (n_directions, n_model_parameters)
+        directions_matrix = torch.cat([delta.unsqueeze(dim=0), self._directions_buffer],
+                                      dim=0)  # shape: (n_directions, n_model_parameters)
         if self._normalize_directions:
             directions_matrix = directions_matrix / torch.linalg.norm(directions_matrix, ord=2, dim=1, keepdim=True)
         return directions_matrix
@@ -89,10 +108,10 @@ class EffectiveRankRegularization(nn.Module):
         if self._directions_buffer.shape[0] < self.buffer_size or len(self._delta_start_params_queue) < 2:
             return torch.tensor(0.0, dtype=torch.float32, device=self._device)
         directions_matrix = self._construct_directions_matrix(model)
-        return self.loss_weight * EffectiveRankRegularization.erank(directions_matrix)
+        return EffectiveRankRegularization.erank(directions_matrix)
 
     @staticmethod
-    def erank(matrix_A: torch.Tensor, center_matrix_A: bool=False) -> torch.Tensor:
+    def erank(matrix_A: torch.Tensor, center_matrix_A: bool = False) -> torch.Tensor:
         """Calculates the effective rank of a matrix.
 
         Args:
@@ -103,7 +122,8 @@ class EffectiveRankRegularization(nn.Module):
             torch.Tensor: Effective rank of matrix_A
         """
         assert matrix_A.ndim == 2
-        _, s, _ = torch.pca_lowrank(matrix_A, center=center_matrix_A, niter=1, q=min(matrix_A.shape[0], matrix_A.shape[1]))
+        _, s, _ = torch.pca_lowrank(matrix_A, center=center_matrix_A, niter=1,
+                                    q=min(matrix_A.shape[0], matrix_A.shape[1]))
 
         # normalizes input s -> scale independent!
         return torch.exp(torch.distributions.Categorical(s).entropy())

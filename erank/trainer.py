@@ -43,7 +43,8 @@ class Trainer(BaseTrainer):
         # add wandb config: need to convert to python native dict
         wandb.init(project=exp_data.project_name, name=HydraConfig.get().job.name, dir=Path.cwd(),
                    config=OmegaConf.to_container(self.config, resolve=True, throw_on_missing=True),
-                   tags=self.config.tags, notes=self.config.notes)
+                   tags=self.config.tags, notes=self.config.notes, 
+                   settings=wandb.Settings(start_method='fork'))
 
     def _create_datasets(self) -> None:
         # create fashion mnist datasets
@@ -112,9 +113,13 @@ class Trainer(BaseTrainer):
         self._metrics = [torchmetrics.Accuracy()]
 
     def _train_epoch(self, epoch: int) -> None:
-        loss_vals = dict(loss_total=[], loss_ce=[], loss_erank=[])
+        # setup logging
+        loss_vals = dict(loss_total=[], loss_ce=[])
+        if self._erank_regularizer is not None:
+            loss_vals.update(dict(loss_erank=[]))
         metric_vals = dict()
-
+        
+        # training loop (iterations per epoch)
         pbar = tqdm(self._loaders['train'], desc=f'Train epoch {epoch}')
         for xs, ys in pbar:
             xs, ys = xs.to(self.device), ys.to(self.device)
@@ -125,10 +130,12 @@ class Trainer(BaseTrainer):
 
             # add erank regularizer
             loss_reg = torch.tensor(0.0).to(loss)
+            loss_weight = 0.0
             if self._erank_regularizer is not None:
                 loss_reg = self._erank_regularizer.forward(self._model)
+                loss_weight = self._erank_regularizer.loss_weight
 
-            loss_total = loss + loss_reg
+            loss_total = loss + loss_weight * loss_reg
 
             # backward pass
             self._optimizer.zero_grad()
@@ -141,7 +148,9 @@ class Trainer(BaseTrainer):
                 self._erank_regularizer.update_delta_start_params(self._model)
 
             # metrics & logging
-            loss_log = dict(loss_total=loss_total.item(), loss_ce=loss.item(), loss_erank=loss_reg.item())
+            loss_log = dict(loss_total=loss_total.item(), loss_ce=loss.item())
+            if self._erank_regularizer is not None:
+                loss_log.update(dict(loss_erank=loss_reg.item()))
 
             for loss_name in loss_vals:
                 loss_vals[loss_name] = loss_log[loss_name]
