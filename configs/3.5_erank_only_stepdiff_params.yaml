@@ -10,34 +10,38 @@ hydra:
     name: ${config.experiment_data.experiment_name}_${now:%d%m%y_%H%M%S}
 ### HYDRA END
 
-# run_config:
-#   exec_type: parallel # sequential
-#   gpu_ids: [2,3]
-#   runs_per_gpu: 5
+run_config:
+  exec_type: parallel # sequential
+  gpu_ids: [2,3,4,5]
+  runs_per_gpu: 4
 
-# seeds: 
-#   - 0
+seeds: 
+  - 0
 
-# sweep:
-#   type: grid
-#   axes:
-#     - parameter: data.train_task_idx
-#       vals: [0,1,2,3,4,5,6,7,8,9]
-
+sweep:
+  type: grid
+  axes:
+    - parameter: trainer.erank.type
+      vals: [pretraindiff] # [random, pretraindiff, none]
+    - parameter: trainer.erank.loss_weight
+      vals: [0.0, 0.1, 1.0, 3.0, 5, 10, 30]
+    - parameter: data.train_task_idx
+      vals: [10, 11, 12] # [10,11]
 ### 
 config:
   experiment_data:
     project_name: erank_supervised
-    experiment_name: f_mnist-erank-DEBUG
+    experiment_name: f_mnist-3.5-erank_only_stepdiff-eranktype_${config.trainer.erank.type}-erankweight_${config.trainer.erank.loss_weight}-taskidx_${config.data.train_task_idx}
     experiment_dir: null
     seed: 0
-    gpu_id: 0
+    gpu_id: 2
 
   tags: # list(), used to tag wandblogger
     - erank
-    - same_init
-  notes: Training with erank regularization, use step differences. Sweep over types random, pretrain_diff and none. # str, used to make notes to wandblogger
-
+    - 3.5_exps
+    - 3_exps
+  notes: Training with erank regularization only. No cross entropy loss. Use pretraindiff and step difference for directions. Train very long. # str, used to make notes to wandblogger
+  ##
   model:
     name: fc
     model_kwargs:
@@ -63,8 +67,8 @@ config:
     init_model: /system/user/beck/pwbeck/projects/regularization/erank/res/init_model.p
     loss: zero
     erank:
-      type: pretraindiff
-      loss_weight: 1
+      type: XXX
+      loss_weight: XXX
       dir_buffer: /system/user/beck/pwbeck/projects/regularization/erank/outputs/f_mnist-2.0-taskidxXXX_260622_110634/outputs
       buffer_size: 10 # number of directions stored in the buffer
       norm_directions: True
@@ -76,7 +80,7 @@ config:
     dataset_dir: /system/user/beck/pwbeck/data/mnist
     train_val_split: 0.8
     num_train_tasks: 13
-    train_task_idx: 10
+    train_task_idx: XXX
     normalizer: # mean and std per channel
       mean:
         - 0.2860

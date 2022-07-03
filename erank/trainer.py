@@ -1,4 +1,5 @@
 import logging
+from typing import Any, Dict
 import wandb
 import torch
 import torchmetrics
@@ -8,10 +9,10 @@ import torchvision.transforms as transforms
 import pandas as pd
 from tqdm import tqdm
 from torch import nn
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf
 from pathlib import Path
 from ml_utilities.torch_utils.factory import create_optimizer_and_scheduler
-from ml_utilities.torch_utils import get_optim
+from ml_utilities.torch_utils import get_loss
 from ml_utilities.torch_models import get_model_class
 from ml_utilities.torch_models.fc import FC
 from ml_utilities.trainers.basetrainer import BaseTrainer
@@ -25,7 +26,7 @@ LOGGER = logging.getLogger(__name__)
 
 class Trainer(BaseTrainer):
 
-    def __init__(self, config: OmegaConf):
+    def __init__(self, config: DictConfig):
         self.config = config
         super().__init__(experiment_dir=config.experiment_data.experiment_dir,
                          seed=config.experiment_data.seed,
@@ -87,7 +88,8 @@ class Trainer(BaseTrainer):
 
     def _create_loss(self) -> None:
         LOGGER.info('Creating loss.')
-        self._loss = nn.CrossEntropyLoss(reduction='mean')
+        loss_cls = get_loss(self.config.trainer.loss)
+        self._loss = loss_cls(reduction='mean')
 
         erank_cfg = self.config.trainer.erank
         erank_reg = None
@@ -104,7 +106,7 @@ class Trainer(BaseTrainer):
             elif erank_cfg.type == 'pretraindiff':
                 erank_reg.init_directions_buffer(path_to_buffer_or_runs=erank_cfg.dir_buffer)
         else:
-            raise ValueError('Unknown erank type.')
+            raise ValueError(f'Unknown erank type: {erank_cfg.type}')
 
         self._erank_regularizer = erank_reg
 
@@ -210,5 +212,5 @@ class Trainer(BaseTrainer):
         self._reset_metrics()
         return val_score
 
-    def _final_hook(self, *args, **kwargs):
-        pass
+    def _final_hook(self, final_results: Dict[str, Any], *args, **kwargs):
+        wandb.run.summary.update(final_results)
