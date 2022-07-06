@@ -12,7 +12,7 @@ hydra:
 
 run_config:
   exec_type: parallel # sequential
-  gpu_ids: [2,3,4,5]
+  gpu_ids: [0,1]
   runs_per_gpu: 4
 
 seeds: 
@@ -24,7 +24,7 @@ sweep:
     - parameter: trainer.erank.type
       vals: [pretraindiff] # [random, pretraindiff, none]
     - parameter: trainer.erank.loss_weight
-      vals: [0.0, 0.1, 1.0, 2.0, 3.0, 5, 8, 10, 15, 30]
+      vals: [50, 100, 500, 1000] #[0.0, 0.1, 1.0, 2.0, 3.0, 5, 8, 10, 15, 30]
     - parameter: data.train_task_idx
       vals: [10, 11, 12] # [10,11]
 ### 
@@ -57,7 +57,7 @@ config:
   trainer:
     n_epochs: 300
     val_every: 1
-    save_every: 5
+    save_every: 50
     early_stopping_patience: 300
     batch_size: 256
     optimizer_scheduler:
@@ -65,6 +65,7 @@ config:
       optimizer_kwargs:
         lr: 0.001
     init_model: /system/user/beck/pwbeck/projects/regularization/erank/res/init_model.p
+    loss: crossentropy
     erank:
       type: XXX
       loss_weight: XXX
