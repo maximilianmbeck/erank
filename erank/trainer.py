@@ -12,7 +12,9 @@ from torch import nn
 from omegaconf import DictConfig, OmegaConf
 from pathlib import Path
 from ml_utilities.torch_utils.factory import create_optimizer_and_scheduler
+from ml_utilities.utils import convert_dict_to_python_types
 from ml_utilities.torch_utils import get_loss
+from ml_utilities.torch_utils.metrics import EntropyCategorical, MaxClassProbCategorical
 from ml_utilities.torch_models import get_model_class
 from ml_utilities.torch_models.fc import FC
 from ml_utilities.trainers.basetrainer import BaseTrainer
@@ -112,14 +114,15 @@ class Trainer(BaseTrainer):
 
     def _create_metrics(self) -> None:
         LOGGER.info('Creating metrics.')
-        self._metrics = [torchmetrics.Accuracy()]
+        metrics = torchmetrics.MetricCollection([torchmetrics.Accuracy(), EntropyCategorical(), MaxClassProbCategorical()])
+        self._train_metrics = metrics.clone() # prefix='train_'
+        self._val_metrics = metrics.clone() # prefix='val_'
 
     def _train_epoch(self, epoch: int) -> None:
         # setup logging
         loss_vals = dict(loss_total=[], loss_ce=[])
         if self._erank_regularizer is not None:
             loss_vals.update(dict(loss_erank=[]))
-        metric_vals = dict()
         
         # training loop (iterations per epoch)
         pbar = tqdm(self._loaders['train'], desc=f'Train epoch {epoch}')
@@ -157,16 +160,16 @@ class Trainer(BaseTrainer):
             for loss_name in loss_vals:
                 loss_vals[loss_name] = loss_log[loss_name]
             with torch.no_grad():
-                for metric in self._metrics:
-                    metric_vals[metric._get_name()] = metric(y_pred, ys).item()
+                metric_vals = self._train_metrics(y_pred, ys)
+
+            additional_logs = self._get_additional_train_step_log()
 
             # log step
             wandb.log({'train_step/': {'epoch': epoch, 'train_step': self._train_step,
-                      **loss_vals, **metric_vals}})
+                      **loss_vals, **metric_vals, **additional_logs}})
 
         # log epoch
-        for metric in self._metrics:
-            metric_vals[metric._get_name()] = metric.compute().item()
+        metric_vals = self._train_metrics.compute()
 
         for loss_name, loss_val_list in loss_vals.items():
             loss_vals[loss_name] = torch.tensor(loss_val_list).mean().item()
@@ -175,13 +178,24 @@ class Trainer(BaseTrainer):
                     **loss_vals, **metric_vals}
         wandb.log({'train_epoch/': log_dict})
 
-        LOGGER.info(f'Train epoch \n{pd.Series(log_dict)}')
+        LOGGER.info(f'Train epoch \n{pd.Series(convert_dict_to_python_types(log_dict), dtype=float)}')
 
         self._reset_metrics()
+    
+    def _get_additional_train_step_log(self) -> Dict[str, Any]:
+        # norm of model parameter vector
+        model_param_vec = nn.utils.parameters_to_vector(self._model.parameters())
+        model_param_norm = torch.linalg.norm(model_param_vec, ord=2).item()
+        
+        # length of optimizer step
+        if self._erank_regularizer is not None:
+            model_step_len = self._erank_regularizer.get_param_step_len()
+
+        log_dict = {'weight_norm': model_param_norm, 'optim_step_len': model_step_len}
+        return log_dict
 
     def _val_epoch(self, epoch: int, trained_model: nn.Module) -> float:
 
-        metric_vals = dict()
         val_losses = []
 
         pbar = tqdm(self._loaders['val'], desc=f'Val epoch {epoch}')
@@ -193,21 +207,19 @@ class Trainer(BaseTrainer):
 
                 loss = self._loss(y_pred, ys)
                 val_losses.append(loss.item())
-                for metric in self._metrics:
-                    m_val = metric(y_pred, ys)
+                m_val = self._val_metrics(y_pred, ys)
 
         # compute mean metrics over dataset
-        for metric in self._metrics:
-            metric_vals[metric._get_name()] = metric.compute().item()
+        metric_vals = self._val_metrics.compute()
 
         # log epoch
         log_dict = {'epoch': epoch, 'loss': torch.tensor(val_losses).mean().item(), **metric_vals}
         wandb.log({'val/': log_dict})
 
-        LOGGER.info(f'Val epoch \n{pd.Series(log_dict)}')
+        LOGGER.info(f'Val epoch \n{pd.Series(convert_dict_to_python_types(log_dict), dtype=float)}')
 
         # val_score is first metric in self._metrics
-        val_score = metric_vals[self._metrics[0]._get_name()]
+        val_score = metric_vals[next(iter(self._val_metrics.items()))[0]].item()
 
         self._reset_metrics()
         return val_score

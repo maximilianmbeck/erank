@@ -20,8 +20,10 @@ class EffectiveRankRegularization(nn.Module):
         normalize_directions (bool, optional): Normalized all model parameters in the directions matrix, 
                                                i.e. all directions to 1 before computing the erank. Defaults to False.
         use_abs_model_params (bool, optional): If true, use absolute model parameters in for the direction matrix. 
-                                               The models are stacked, i.e. each row contains the parameters of a model. Defaults to False.
-
+                                               The models are stacked, i.e. each row contains the parameters of a model. 
+                                               If false, use model training differences, i.e. for pretrained models: 
+                                               best model minus initialization. For the model that is optimized during training 
+                                               use current model parameters minus previous model parameters. 
 
     References:
         .. [#] Roy, Olivier, and Martin Vetterli. "The effective rank: A measure of effective dimensionality."
@@ -34,7 +36,7 @@ class EffectiveRankRegularization(nn.Module):
         self.buffer_size = buffer_size  # number of directions in the buffer
         self.loss_weight = loss_weight  # weighting parameter in the loss (will be multiplied with erank term)
         self._device = next(iter(init_model.parameters())).device
-        # types:
+        
         self._normalize_directions = normalize_directions
         self._use_abs_model_params = use_abs_model_params
 
@@ -62,6 +64,17 @@ class EffectiveRankRegularization(nn.Module):
         # FIFO queue for _directions_buffer
         raise NotImplementedError()
 
+    def get_param_step_len(self) -> float:
+        """Returns the difference between the model parameter vectors in the delta_start_params_queue.
+        This corresponds to the optimizer step length, if the queue is updated after every optimizer step.
+        """
+        if len(self._delta_start_params_queue) < 2:
+            return 0.0
+        else:
+            # subtract the previous added item from the last added item
+            delta = self._delta_start_params_queue[-1] - self._delta_start_params_queue[-2]
+            return torch.linalg.norm(delta, ord=2).item()
+
     def init_directions_buffer(self, path_to_buffer_or_runs: str = '', random_buffer: bool = False) -> None:
         if random_buffer:
             n_model_params = self._delta_start_params_queue[0].shape[0]
@@ -77,7 +90,7 @@ class EffectiveRankRegularization(nn.Module):
                 LOGGER.info(
                     f'Loaded erank directions from run dir {path_to_buffer_or_runs} (shape {directions_buffer.shape}).')
             else:
-                raise NotImplementedError('Loading file not supported yet')
+                raise NotImplementedError('Loading file not supported.')
 
         assert directions_buffer.shape[
             0] == self.buffer_size, f'Specified buffer size is {self.buffer_size}, but given directions_buffer as shape {directions_buffer.shape}.'
