@@ -46,7 +46,7 @@ class Trainer(BaseTrainer):
         # add wandb config: need to convert to python native dict
         wandb.init(project=exp_data.project_name, name=HydraConfig.get().job.name, dir=Path.cwd(),
                    config=OmegaConf.to_container(self.config, resolve=True, throw_on_missing=True),
-                   tags=self.config.tags, notes=self.config.notes, 
+                   tags=self.config.tags, notes=self.config.notes,
                    settings=wandb.Settings(start_method='fork'))
 
     def _create_datasets(self) -> None:
@@ -62,7 +62,8 @@ class Trainer(BaseTrainer):
 
         train_set, val_set = random_split_train_tasks(
             train_dataset, num_train_tasks=data_cfg.num_train_tasks, train_task_idx=data_cfg.train_task_idx,
-            train_val_split=data_cfg.train_val_split)
+            train_val_split=data_cfg.train_val_split, num_subsplit_tasks=data_cfg.num_subsplit_tasks,
+            subsplit_first_n_train_tasks=data_cfg.subsplit_first_n_train_tasks)
         self._datasets = dict(train=train_set, val=val_set)
 
     def _create_dataloaders(self) -> None:
@@ -114,16 +115,19 @@ class Trainer(BaseTrainer):
 
     def _create_metrics(self) -> None:
         LOGGER.info('Creating metrics.')
-        metrics = torchmetrics.MetricCollection([torchmetrics.Accuracy(), EntropyCategorical(), MaxClassProbCategorical()])
-        self._train_metrics = metrics.clone() # prefix='train_'
-        self._val_metrics = metrics.clone() # prefix='val_'
+        metrics = torchmetrics.MetricCollection(
+            [torchmetrics.Accuracy(),
+             EntropyCategorical(),
+             MaxClassProbCategorical()])
+        self._train_metrics = metrics.clone()  # prefix='train_'
+        self._val_metrics = metrics.clone()  # prefix='val_'
 
     def _train_epoch(self, epoch: int) -> None:
         # setup logging
         loss_vals = dict(loss_total=[], loss_ce=[])
         if self._erank_regularizer is not None:
             loss_vals.update(dict(loss_erank=[]))
-        
+
         # training loop (iterations per epoch)
         pbar = tqdm(self._loaders['train'], desc=f'Train epoch {epoch}')
         for xs, ys in pbar:
@@ -181,17 +185,18 @@ class Trainer(BaseTrainer):
         LOGGER.info(f'Train epoch \n{pd.Series(convert_dict_to_python_types(log_dict), dtype=float)}')
 
         self._reset_metrics()
-    
+
     def _get_additional_train_step_log(self) -> Dict[str, Any]:
         # norm of model parameter vector
         model_param_vec = nn.utils.parameters_to_vector(self._model.parameters())
         model_param_norm = torch.linalg.norm(model_param_vec, ord=2).item()
-        
+        log_dict = {'weight_norm': model_param_norm}
+
         # length of optimizer step
         if self._erank_regularizer is not None:
             model_step_len = self._erank_regularizer.get_param_step_len()
-
-        log_dict = {'weight_norm': model_param_norm, 'optim_step_len': model_step_len}
+            log_dict.update({'optim_step_len': model_step_len})
+            
         return log_dict
 
     def _val_epoch(self, epoch: int, trained_model: nn.Module) -> float:
