@@ -36,7 +36,7 @@ class EffectiveRankRegularization(nn.Module):
         self.buffer_size = buffer_size  # number of directions in the buffer
         self.loss_weight = loss_weight  # weighting parameter in the loss (will be multiplied with erank term)
         self._device = next(iter(init_model.parameters())).device
-        
+
         self._normalize_directions = normalize_directions
         self._use_abs_model_params = use_abs_model_params
 
@@ -86,7 +86,8 @@ class EffectiveRankRegularization(nn.Module):
             if load_path.is_dir():
 
                 directions_buffer = load_directions_matrix_from_task_sweep(
-                    load_path, device=self._device, use_absolute_model_params=self._use_abs_model_params)
+                    load_path, num_runs=self.buffer_size, device=self._device,
+                    use_absolute_model_params=self._use_abs_model_params)
                 LOGGER.info(
                     f'Loaded erank directions from run dir {path_to_buffer_or_runs} (shape {directions_buffer.shape}).')
             else:
@@ -136,7 +137,7 @@ class EffectiveRankRegularization(nn.Module):
         """
         assert matrix_A.ndim == 2
         _, s, _ = torch.pca_lowrank(matrix_A, center=center_matrix_A, niter=1,
-                                    q=min(matrix_A.shape[0], matrix_A.shape[1])) # TODO check with torch doc.
+                                    q=min(matrix_A.shape[0], matrix_A.shape[1]))  # TODO check with torch doc.
 
         # normalizes input s -> scale independent!
         return torch.exp(torch.distributions.Categorical(s).entropy())
