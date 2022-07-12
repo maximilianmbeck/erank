@@ -59,11 +59,7 @@ class Trainer(BaseTrainer):
                                         transforms.Normalize(normalizer.mean, normalizer.std)])
 
         train_dataset = torchvision.datasets.FashionMNIST(root=data_dir, train=True, transform=transform, download=True)
-
-        train_set, val_set = random_split_train_tasks(
-            train_dataset, num_train_tasks=data_cfg.num_train_tasks, train_task_idx=data_cfg.train_task_idx,
-            train_val_split=data_cfg.train_val_split, num_subsplit_tasks=data_cfg.num_subsplit_tasks,
-            subsplit_first_n_train_tasks=data_cfg.subsplit_first_n_train_tasks)
+        train_set, val_set = random_split_train_tasks(train_dataset, **data_cfg.dataset_split)
         self._datasets = dict(train=train_set, val=val_set)
 
     def _create_dataloaders(self) -> None:
@@ -83,6 +79,8 @@ class Trainer(BaseTrainer):
             self._model = model_class.load(self.config.trainer.init_model, device=self.device)
         else:
             self._model = model_class(**self.config.model.model_kwargs)
+        
+        wandb.watch(self._model, log='all', log_freq=1000)
 
     def _create_optimizer_and_scheduler(self, model: nn.Module) -> None:
         LOGGER.info('Create optimizer and scheduler.')
@@ -196,7 +194,7 @@ class Trainer(BaseTrainer):
         if self._erank_regularizer is not None:
             model_step_len = self._erank_regularizer.get_param_step_len()
             log_dict.update({'optim_step_len': model_step_len})
-            
+
         return log_dict
 
     def _val_epoch(self, epoch: int, trained_model: nn.Module) -> float:
