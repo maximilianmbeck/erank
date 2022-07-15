@@ -46,7 +46,7 @@ class Trainer(BaseTrainer):
         # add wandb config: need to convert to python native dict
         wandb.init(project=exp_data.project_name, name=HydraConfig.get().job.name, dir=Path.cwd(),
                    config=OmegaConf.to_container(self.config, resolve=True, throw_on_missing=True),
-                   tags=self.config.tags, notes=self.config.notes,
+                   tags=self.config.wandb.tags, notes=self.config.wandb.notes,
                    settings=wandb.Settings(start_method='fork'))
 
     def _create_datasets(self) -> None:
@@ -72,7 +72,7 @@ class Trainer(BaseTrainer):
         self._loaders = dict(train=train_loader, val=val_loader)
 
     def _create_model(self) -> None:
-        LOGGER.info('Creating model.')
+        LOGGER.info(f'Creating model: {self.config.model.name}')
         model_class = get_model_class(self.config.model.name)
         if self.config.trainer.init_model:
             LOGGER.info(f'Loading model {self.config.trainer.init_model} to device {self.device}.')
@@ -80,7 +80,7 @@ class Trainer(BaseTrainer):
         else:
             self._model = model_class(**self.config.model.model_kwargs)
         
-        wandb.watch(self._model, log='all', log_freq=1000)
+        wandb.watch(self._model, **self.config.wandb.watch)
 
     def _create_optimizer_and_scheduler(self, model: nn.Module) -> None:
         LOGGER.info('Create optimizer and scheduler.')

@@ -37,11 +37,16 @@ config:
     seed: 0
     gpu_id: 2
 
-  tags: # list(), used to tag wandblogger
-    - ${config.experiment_data.experiment_tag}_exps
-    - erank
-    - rerun
-  notes: This experiment uses erank abs model parameters with random directions. Check, wheter the accuracy peak also occurs with random directions. # str, used to make notes to wandblogger
+  wandb:
+    tags: # list(), used to tag wandblogger
+      - ${config.experiment_data.experiment_tag}_exps
+      - erank
+      - rerun
+    notes: This experiment uses erank abs model parameters with random directions. Check, wheter the accuracy peak also occurs with random directions. # str, used to make notes to wandblogger
+    
+    watch:
+      log: all
+      log_freq: 100
 
   model:
     name: fc
