@@ -79,11 +79,11 @@ config:
     dataset: fashion_mnist
     dataset_kwargs:
       dataset_dir: /system/user/beck/pwbeck/data/mnist
-      normalizer: # mean and std per channel
-        mean:
-          - 0.2860
-        std:
-          - 0.3205
+      # normalizer: # mean and std per channel
+      #   mean:
+      #     - 0.2860
+      #   std:
+      #     - 0.3205
     dataset_split:
       train_val_split: 0.8
       num_train_tasks: 13
