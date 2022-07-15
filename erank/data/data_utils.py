@@ -2,12 +2,12 @@ from typing import Tuple
 import torch
 import torch.utils.data as data
 
-
 def random_split_train_tasks(dataset: data.Dataset, num_train_tasks: int = 1, train_task_idx: int = 0,
                              train_val_split: float = 0.8, seed: int = 0, num_subsplit_tasks: int = 0,
                              subsplit_first_n_train_tasks: int = 0) -> Tuple[data.Dataset, data.Dataset]:
     """Splits a dataset into different (sample-wise) training tasks. 
     Each training task has different set of data samples. Validation set is same for every task.
+    It further allows to subsplit the first `subsplit_n_train_tasks` further into `num_subsplit_tasks`.
 
     Args:
         dataset (data.Dataset): The dataset to split. 
@@ -15,10 +15,13 @@ def random_split_train_tasks(dataset: data.Dataset, num_train_tasks: int = 1, tr
         train_task_idx (int, optional): The current training task. Defaults to 0.
         train_val_split (float, optional): Fraction of train/val samples. Defaults to 0.8.
         seed (int, optional): The seed. Defaults to 0.
+        num_subsplit_tasks (int, optional): Number of subsplit tasks. Defaults to 0.
+        subsplit_first_n_train_tasks (int, optional): The number of first training tasks to further subsplit. Defaults to 0.
 
     Returns:
         Tuple[data.Dataset, data.Dataset]: train dataset, val dataset
     """
+
     assert train_task_idx >= 0 and train_task_idx < (
         num_train_tasks - subsplit_first_n_train_tasks) + num_subsplit_tasks, 'Invalid train_task_idx given.'
 

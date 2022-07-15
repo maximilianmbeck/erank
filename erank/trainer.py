@@ -4,8 +4,6 @@ import wandb
 import torch
 import torchmetrics
 import torch.utils.data as data
-import torchvision
-import torchvision.transforms as transforms
 import pandas as pd
 from tqdm import tqdm
 from torch import nn
@@ -18,9 +16,9 @@ from ml_utilities.torch_utils.metrics import EntropyCategorical, MaxClassProbCat
 from ml_utilities.torch_models import get_model_class
 from ml_utilities.torch_models.fc import FC
 from ml_utilities.trainers.basetrainer import BaseTrainer
-from hydra.utils import get_original_cwd
 from hydra.core.hydra_config import HydraConfig
-from erank.data import random_split_train_tasks
+from erank.data import get_dataset_provider
+from erank.data.data_utils import random_split_train_tasks
 from erank.regularization import EffectiveRankRegularization
 
 LOGGER = logging.getLogger(__name__)
@@ -53,12 +51,8 @@ class Trainer(BaseTrainer):
         # create fashion mnist datasets
         LOGGER.info('Loading train/val dataset.')
         data_cfg = self.config.data
-        data_dir = Path(get_original_cwd()) / data_cfg.dataset_dir
-        normalizer = data_cfg.normalizer
-        transform = transforms.Compose([transforms.ToTensor(),
-                                        transforms.Normalize(normalizer.mean, normalizer.std)])
-
-        train_dataset = torchvision.datasets.FashionMNIST(root=data_dir, train=True, transform=transform, download=True)
+        provide_dataset = get_dataset_provider(dataset_name=data_cfg.dataset)
+        train_dataset = provide_dataset(data_cfg.dataset_kwargs)
         train_set, val_set = random_split_train_tasks(train_dataset, **data_cfg.dataset_split)
         self._datasets = dict(train=train_set, val=val_set)
 
