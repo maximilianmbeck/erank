@@ -43,50 +43,32 @@ config:
       log_freq: 100
 
   model:
-    name: cnn2d
-    out_channels: 128
+    name: fc
     model_kwargs:
-      image_size: 28
-      input_channels: 1
+      input_size: 784
+      hidden_sizes:
+        - 512
+        - 512
+      output_size: 10
+      flatten_input: true
+      dropout: 0.2
       act_fn: relu
-      layer_configs:
-        - out_channels: ${config.model.out_channels}
-          kernel_size: 3
-          batch_norm: true
-          stride: 1
-          padding: 0
-          max_pool_kernel_size: 2
-        - out_channels: ${config.model.out_channels}
-          kernel_size: 3
-          batch_norm: true
-          stride: 1
-          padding: 0
-          max_pool_kernel_size: 2
-        - out_channels: ${config.model.out_channels}
-          kernel_size: 3
-          batch_norm: true
-          stride: 1
-          padding: 0
-          max_pool_kernel_size: 2
-      linear_output_units:
-        - 10
 
   trainer:
-    n_epochs: 300
+    n_epochs: 100
     val_every: 1
     save_every: 50
-    early_stopping_patience: 20
-    batch_size: 512
+    early_stopping_patience: 300
+    batch_size: 256
     optimizer_scheduler:
-      optimizer_name: adamw
+      optimizer_name: adam
       optimizer_kwargs:
         lr: 0.001
-        weight_decay: 0.0
-    init_model: null #/system/user/beck/pwbeck/projects/regularization/erank/res/init_model.p
+    init_model: /system/user/beck/pwbeck/projects/regularization/erank/res/init_model.p
     loss: crossentropy
     erank:
-      type: none #random #pretraindiff
-      loss_weight: 0.0
+      type: pretraindiff
+      loss_weight: 1
       dir_buffer: /system/user/beck/pwbeck/projects/regularization/erank/outputs/f_mnist-2.0-taskidxXXX_260622_110634/outputs
       buffer_size: 10 # number of directions stored in the buffer
       norm_directions: False
@@ -94,9 +76,14 @@ config:
     num_workers: 4
 
   data: 
-    dataset: cifar10
+    dataset: fashion_mnist
     dataset_kwargs:
-      dataset_dir: /system/user/beck/pwbeck/data/cifar
+      dataset_dir: /system/user/beck/pwbeck/data/mnist
+      # normalizer: # mean and std per channel
+      #   mean:
+      #     - 0.2860
+      #   std:
+      #     - 0.3205
     dataset_split:
       train_val_split: 0.8
       num_train_tasks: 13

@@ -1,0 +1,8 @@
+run:
+  dir: outputs/${hydra.job.name}
+sweep:
+  dir: outputs/${hydra.job.name}
+  subdir: ${hydra.job.num}
+job:
+  chdir: True # change working directory of run
+  name: ${config.experiment_data.experiment_name}_${now:%d%m%y_%H%M%S}

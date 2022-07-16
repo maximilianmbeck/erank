@@ -1,14 +1,6 @@
-### HYDRA START
-hydra:
-  run:
-    dir: outputs/${hydra.job.name}
-  sweep:
-    dir: outputs/${hydra.job.name}
-    subdir: ${hydra.job.num}
-  job:
-    chdir: True # change working directory of run
-    name: ${config.experiment_data.experiment_name}_${now:%d%m%y_%H%M%S}
-### HYDRA END
+defaults:
+  - hydra: jobname_outputdir_format
+#######
 
 run_config: # eagle # dragonfly
   exec_type: parallel # sequential
@@ -21,22 +13,14 @@ seeds:
 sweep:
   type: grid
   axes:
-    - parameter: trainer.optimizer_scheduler.optimizer_kwargs.lr
-      vals: [1e-3] #[1e-1, 1e-2, 1e-3, 1e-4, 1e-5]
-    - parameter: trainer.optimizer_scheduler.optimizer_kwargs.weight_decay
-      vals: [1e-3, 1e-4] #[0.0, 0.01, 0.001, 0.0001] #[0.0, 0.0001, 0.001, 0.01, 0.1]
-    - parameter: trainer.batch_size
-      vals: [64, 128, 256, 512]
-    - parameter: model.out_channels
-      vals: [256, 512] #[32, 64, 128]
     - parameter: data.dataset_split.train_task_idx
-      vals: [10] #[10, 11, 12]
+      vals: [0,1,2,3,4,5,6,7,8,9] #[10, 11, 12]
 ### 
 config:
   experiment_data:
     project_name: erank_supervised
-    experiment_tag: '5.0'
-    experiment_name: f_mnist-${config.experiment_data.experiment_tag}-cnn_hypsearch-channels_${config.model.out_channels}-lr_${config.trainer.optimizer_scheduler.optimizer_kwargs.lr}-wd_${config.trainer.optimizer_scheduler.optimizer_kwargs.weight_decay}-batchsize${config.trainer.batch_size}-taskidx_${config.data.dataset_split.train_task_idx}
+    experiment_tag: '5.3'
+    experiment_name: f_mnist-${config.experiment_data.experiment_tag}-cnn_pretrain-taskidx_${config.data.dataset_split.train_task_idx}
     experiment_dir: null
     seed: 0
     gpu_id: 2
@@ -46,7 +30,7 @@ config:
       - ${config.experiment_data.experiment_tag}_exps
       - erank
       - rerun
-    notes: Hyperparametersearch for 3 layer cnn on Fashion MNIST. # str, used to make notes to wandblogger
+    notes: Pretraining on different tasks. # str, used to make notes to wandblogger
     
     watch:
       log: null #all
@@ -54,7 +38,7 @@ config:
 
   model:
     name: cnn2d
-    out_channels: XXX
+    out_channels: 256
     model_kwargs:
       image_size: 28
       input_channels: 1
@@ -86,13 +70,13 @@ config:
     val_every: 1
     save_every: 50
     early_stopping_patience: 40
-    batch_size: XXX
+    batch_size: 256
     optimizer_scheduler:
       optimizer_name: adamw
       optimizer_kwargs:
-        lr: XXX
-        weight_decay: XXX
-    init_model: null #/system/user/beck/pwbeck/projects/regularization/erank/res/init_model.p
+        lr: 0.001
+        weight_decay: 0.001
+    init_model: /system/user/publicwork/beck/projects/regularization/erank/outputs/f_mnist-5.0-cnn_hypsearch-channels_XXX-lr_XXX-wd_XXX-batchsizeXXX-taskidx_XXX_160722_090756/outputs/f_mnist-5.0-cnn_hypsearch-channels_256-lr_0.001-wd_0.001-batchsize256-taskidx_10-seed0_160722_090919/model_epoch_000.p
     loss: crossentropy
     erank:
       type: none #random #pretraindiff
