@@ -2,10 +2,10 @@ defaults:
   - hydra: jobname_outputdir_format
 #######
 
-run_config: # eagle 
+run_config: #dragonfly2 # eagle 
   exec_type: parallel # sequential
-  gpu_ids: [0,1]
-  runs_per_gpu: 10
+  gpu_ids: [0,1,2,3]
+  runs_per_gpu: 2
 
 seeds: 
   - 0
@@ -14,14 +14,14 @@ sweep:
   type: grid
   axes:
     - parameter: trainer.erank.loss_weight
-      vals: [0.0, 0.1, 1.0, 10, 30, 50, 100, 500, 1000]
+      vals: [0.0, 0.1, 1.0, 10, 50, 100, 500, 1000] #[0.0, 0.1, 1.0, 10, 30, 50, 100, 500, 1000]
     - parameter: data.dataset_split.train_task_idx
-      vals: [10, 11, 12]
+      vals: [10] #[10, 11, 12]
 ### 
 config:
   experiment_data:
     project_name: erank_supervised
-    experiment_tag: '5.6'
+    experiment_tag: '5.6.1' #'5.6'
     experiment_name: f_mnist-${config.experiment_data.experiment_tag}-cnn_erank_absmodel-erankweight_${config.trainer.erank.loss_weight}-taskidx_${config.data.dataset_split.train_task_idx}
     experiment_dir: null
     seed: 0
@@ -77,7 +77,7 @@ config:
       optimizer_name: adamw
       optimizer_kwargs:
         lr: 0.001
-        weight_decay: 0.001
+        weight_decay: 0.0 #0.001
     init_model: /system/user/publicwork/beck/projects/regularization/erank/outputs/f_mnist-5.0-cnn_hypsearch-channels_XXX-lr_XXX-wd_XXX-batchsizeXXX-taskidx_XXX_160722_090756/outputs/f_mnist-5.0-cnn_hypsearch-channels_256-lr_0.001-wd_0.001-batchsize256-taskidx_10-seed0_160722_090919/model_epoch_000.p
     loss: crossentropy
     erank:

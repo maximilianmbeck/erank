@@ -2,9 +2,9 @@ defaults:
   - hydra: jobname_outputdir_format
 #######
 
-run_config: # raptor
+run_config: #raptor2 # raptor
   exec_type: parallel # sequential
-  gpu_ids: [0,1]
+  gpu_ids: [2]
   runs_per_gpu: 10
 
 seeds: 
@@ -16,12 +16,12 @@ sweep:
     - parameter: trainer.erank.loss_weight
       vals: [0.0, 0.1, 1.0, 10, 30, 50, 100, 500, 1000]
     - parameter: data.dataset_split.train_task_idx
-      vals: [10, 11, 12]
+      vals: [10] #[10, 11, 12]
 ### 
 config:
   experiment_data:
     project_name: erank_supervised
-    experiment_tag: '5.8'
+    experiment_tag: '5.8.1' #'5.8'
     experiment_name: cf10-${config.experiment_data.experiment_tag}-fc_erank_absmodel-erankweight_${config.trainer.erank.loss_weight}-taskidx_${config.data.dataset_split.train_task_idx}
     experiment_dir: null
     seed: 0
@@ -60,7 +60,7 @@ config:
       optimizer_name: adamw
       optimizer_kwargs:
         lr: 0.0001
-        weight_decay: 0.01
+        weight_decay: 0.0 #0.01
     init_model: /system/user/publicwork/beck/projects/regularization/erank/outputs/cf10-5.2-fc_hypsearch-lr_XXX-wd_XXX-batchsizeXXX-taskidx_XXX_150722_145132/outputs/cf10-5.2-fc_hypsearch-lr_0.0001-wd_0.01-batchsize256-taskidx_10-seed0_150722_145222/model_epoch_000.p
     loss: crossentropy
     erank:
