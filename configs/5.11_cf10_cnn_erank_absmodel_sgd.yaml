@@ -1,0 +1,103 @@
+defaults:
+  - hydra: jobname_outputdir_format
+#######
+
+run_config: #badger
+  exec_type: parallel # sequential
+  gpu_ids: [0] #[2,3]
+  runs_per_gpu: 3
+
+seeds: 
+  - 0
+
+sweep:
+  type: grid
+  axes:
+    - parameter: trainer.erank.loss_weight
+      vals: [0.0, 1.0, 10, 50, 100, 500, 1000]
+    - parameter: trainer.optimizer_scheduler.optimizer_kwargs.lr
+      vals: [1e-4, 1e-5] #[1e-2, 1e-3, 1e-4, 1e-5]
+    - parameter: data.dataset_split.train_task_idx
+      vals: [10] #[10, 11, 12]
+### 
+config:
+  experiment_data:
+    project_name: erank_supervised
+    experiment_tag: '5.11'
+    experiment_name: cf10-${config.experiment_data.experiment_tag}-cnn_erank_absmodel_sgd-erankweight_${config.trainer.erank.loss_weight}-lr_${config.trainer.optimizer_scheduler.optimizer_kwargs.lr}-taskidx_${config.data.dataset_split.train_task_idx}
+    experiment_dir: null
+    seed: 0
+    gpu_id: 2
+
+  wandb:
+    tags: # list(), used to tag wandblogger
+      - ${config.experiment_data.experiment_tag}_exps
+      - erank
+      - absmodel
+    notes: Erank with 3 layer cnn on CIFAR10. # str, used to make notes to wandblogger
+    
+    watch:
+      log: parameters #null #all
+      log_freq: 8000
+
+  model:
+    name: cnn2d
+    out_channels: 512
+    model_kwargs:
+      image_size: 32
+      input_channels: 3
+      act_fn: relu
+      layer_configs:
+        - out_channels: ${config.model.out_channels}
+          kernel_size: 3
+          batch_norm: true
+          stride: 1
+          padding: 0
+          max_pool_kernel_size: 2
+        - out_channels: ${config.model.out_channels}
+          kernel_size: 3
+          batch_norm: true
+          stride: 1
+          padding: 0
+          max_pool_kernel_size: 2
+        - out_channels: ${config.model.out_channels}
+          kernel_size: 3
+          batch_norm: true
+          stride: 1
+          padding: 0
+          max_pool_kernel_size: 2
+      linear_output_units:
+        - 10
+
+  trainer:
+    n_epochs: 600
+    val_every: 1
+    save_every: 400
+    early_stopping_patience: 600
+    batch_size: 64
+    optimizer_scheduler:
+      optimizer_name: sgd
+      optimizer_kwargs:
+        lr: XXX
+        weight_decay: 0.0 #0.0001
+    init_model: /system/user/publicwork/beck/projects/regularization/erank/outputs/cf10-5.1-cnn_hypsearch-channels_XXX-lr_XXX-wd_XXX-batchsizeXXX-taskidx_XXX_160722_094051/outputs/cf10-5.1-cnn_hypsearch-channels_512-lr_0.001-wd_0.0001-batchsize64-taskidx_10-seed0_160722_094215/model_epoch_000.p
+    loss: crossentropy
+    erank:
+      type: pretraindiff #none #random #pretraindiff
+      loss_weight: XXX
+      dir_buffer: /system/user/publicwork/beck/projects/regularization/erank/outputs/cf10-5.4-cnn_pretrain-taskidx_XXX_160722_103330/outputs
+      buffer_size: 10 # number of directions stored in the buffer
+      norm_directions: False
+      use_abs_model_params: True
+    num_workers: 4
+
+  data: 
+    dataset: cifar10
+    dataset_kwargs:
+      dataset_dir: /system/user/beck/pwbeck/data/cifar
+    dataset_split:
+      train_val_split: 0.8
+      num_train_tasks: 13
+      subsplit_first_n_train_tasks: 0
+      num_subsplit_tasks: 0
+      train_task_idx: XXX
