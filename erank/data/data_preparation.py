@@ -30,7 +30,10 @@ def prepare_cifar10(dataset_kwargs: DictConfig) -> data.Dataset:
 def _prepare_torchdataset(
         torch_dataset_class: Type[data.Dataset],
         dataset_kwargs: DictConfig, default_normalizer: Dict[str, List[float]]) -> data.Dataset:
-    data_dir = Path(get_original_cwd()) / dataset_kwargs.dataset_dir
+    data_dir = Path(
+        dataset_kwargs.dataset_dir) if Path(
+        dataset_kwargs.dataset_dir).is_absolute() else Path(
+        get_original_cwd()) / dataset_kwargs.dataset_dir
     normalizer = dataset_kwargs.get('normalizer', None)
     if normalizer is None:
         LOGGER.info(f'Using default normalizer: {default_normalizer}')

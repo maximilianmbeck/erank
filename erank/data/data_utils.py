@@ -2,9 +2,10 @@ from typing import Tuple
 import torch
 import torch.utils.data as data
 
+
 def random_split_train_tasks(dataset: data.Dataset, num_train_tasks: int = 1, train_task_idx: int = 0,
                              train_val_split: float = 0.8, seed: int = 0, num_subsplit_tasks: int = 0,
-                             subsplit_first_n_train_tasks: int = 0) -> Tuple[data.Dataset, data.Dataset]:
+                             subsplit_first_n_train_tasks: int = 0, restrict_n_samples_train_task: int = -1) -> Tuple[data.Dataset, data.Dataset]:
     """Splits a dataset into different (sample-wise) training tasks. 
     Each training task has different set of data samples. Validation set is same for every task.
     It further allows to subsplit the first `subsplit_n_train_tasks` further into `num_subsplit_tasks`.
@@ -17,6 +18,7 @@ def random_split_train_tasks(dataset: data.Dataset, num_train_tasks: int = 1, tr
         seed (int, optional): The seed. Defaults to 0.
         num_subsplit_tasks (int, optional): Number of subsplit tasks. Defaults to 0.
         subsplit_first_n_train_tasks (int, optional): The number of first training tasks to further subsplit. Defaults to 0.
+        restrict_n_samples_train_task (int, optional): Restrict the number of samples in the train split. If -1, use the whole train split. Defaults to -1.
 
     Returns:
         Tuple[data.Dataset, data.Dataset]: train dataset, val dataset
@@ -63,4 +65,13 @@ def random_split_train_tasks(dataset: data.Dataset, num_train_tasks: int = 1, tr
         data_splits = data_subsplits + data_splits
 
     # select train task split + val split
-    return data_splits[train_task_idx], data_splits[-1]
+    train_set, val_set = data_splits[train_task_idx], data_splits[-1]
+
+    # restrict number of training samples
+    if restrict_n_samples_train_task > 0:
+        assert len(
+            train_set) >= restrict_n_samples_train_task, f'Not enough number of samples in the training set! Trying to restrict to {restrict_n_samples_train_task} samples, but training set has only {len(train_set)} samples.'
+
+        train_set = data.Subset(train_set, range(restrict_n_samples_train_task))
+
+    return train_set, val_set

@@ -14,6 +14,15 @@
             "justMyCode": false
         },
         {
+            "name": "run.py default local",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/run.py",
+            "args": ["--config-name", "config_debug_local.yaml"],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
             "name": "run_sweep.py default",
             "type": "python",
             "request": "launch",

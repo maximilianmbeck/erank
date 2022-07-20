@@ -54,6 +54,7 @@ class Trainer(BaseTrainer):
         provide_dataset = get_dataset_provider(dataset_name=data_cfg.dataset)
         train_dataset = provide_dataset(data_cfg.dataset_kwargs)
         train_set, val_set = random_split_train_tasks(train_dataset, **data_cfg.dataset_split)
+        LOGGER.info(f'Size of training/validation set: ({len(train_set)}/{len(val_set)})')
         self._datasets = dict(train=train_set, val=val_set)
 
     def _create_dataloaders(self) -> None:
