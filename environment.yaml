@@ -155,6 +155,7 @@ dependencies:
     - terminado==0.15.0
     - tinycss2==1.1.1
     - toml==0.10.2
+    - torch-summary==1.4.5
     - torchmetrics==0.9.1
     - tornado==6.1
     - tqdm==4.64.0
