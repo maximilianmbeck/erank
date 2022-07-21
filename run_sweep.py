@@ -15,7 +15,8 @@ def run(cfg: DictConfig):
     cfg = OmegaConf.merge(hydra_config, cfg)
     LOGGER.info(f'Starting experiment with config: \n{OmegaConf.to_yaml(cfg)}')
     # absolute path to run script
-    script_path='/system/user/beck/pwbeck/projects/regularization/erank/run.py'
+    # script_path='/system/user/beck/pwbeck/projects/regularization/erank/run.py'
+    script_path = Path(__file__).parent / 'run.py'
     run_handler = RunHandler(cfg, script_path)
     run_handler.run()
 

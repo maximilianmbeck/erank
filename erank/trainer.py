@@ -96,7 +96,7 @@ class Trainer(BaseTrainer):
             erank_reg = EffectiveRankRegularization(
                 buffer_size=erank_cfg.buffer_size, init_model=self._model, loss_weight=erank_cfg.loss_weight,
                 normalize_directions=erank_cfg.get('norm_directions', False),
-                use_abs_model_params=erank_cfg.get('use_abs_model_params', False))
+                use_abs_model_params=erank_cfg.get('use_abs_model_params', True))
             if erank_cfg.type == 'random':
                 erank_reg.init_directions_buffer(random_buffer=True)
             elif erank_cfg.type == 'pretraindiff':
@@ -190,6 +190,11 @@ class Trainer(BaseTrainer):
             model_step_len = self._erank_regularizer.get_param_step_len()
             log_dict.update({'optim_step_len': model_step_len})
 
+            # erank of normalized models
+            if self.config.trainer.erank.get('log_normalized_erank', False):
+                normalized_erank = self._erank_regularizer.get_normalized_erank()
+                log_dict.update({'normalized_erank': normalized_erank})
+
         return log_dict
 
     def _val_epoch(self, epoch: int, trained_model: nn.Module) -> float:
@@ -216,7 +221,7 @@ class Trainer(BaseTrainer):
 
         LOGGER.info(f'Val epoch \n{pd.Series(convert_dict_to_python_types(log_dict), dtype=float)}')
 
-        # val_score is first metric in self._metrics
+        # val_score is first metric in self._val_metrics
         val_score = metric_vals[next(iter(self._val_metrics.items()))[0]].item()
 
         self._reset_metrics()

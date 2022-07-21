@@ -75,6 +75,15 @@ class EffectiveRankRegularization(nn.Module):
             delta = self._delta_start_params_queue[-1] - self._delta_start_params_queue[-2]
             return torch.linalg.norm(delta, ord=2).item()
 
+    def get_normalized_erank(self) -> float:
+        """Returns the normalized effective rank of matrix composed of the last model and the pretrained models."""
+        if self._directions_buffer.shape[0] < self.buffer_size or len(self._delta_start_params_queue) < 2:
+            return torch.tensor(0.0, dtype=torch.float32, device=self._device)
+        model = self._delta_start_params_queue[-1]
+        directions_matrix = self._construct_directions_matrix(
+            model, use_abs_model_params=True, normalize_matrix=True)
+        return EffectiveRankRegularization.erank(directions_matrix)
+
     def init_directions_buffer(self, path_to_buffer_or_runs: str = '', random_buffer: bool = False) -> None:
         if random_buffer:
             n_model_params = self._delta_start_params_queue[0].shape[0]
@@ -97,15 +106,20 @@ class EffectiveRankRegularization(nn.Module):
             0] == self.buffer_size, f'Specified buffer size is {self.buffer_size}, but given directions_buffer as shape {directions_buffer.shape}.'
         self._directions_buffer = directions_buffer
 
-    def _construct_directions_matrix(self, model: nn.Module) -> torch.Tensor:
+    def _construct_directions_matrix(
+            self, model: nn.Module, use_abs_model_params: bool, normalize_matrix: bool) -> torch.Tensor:
+        """Constructs the directions matrix (which is used to calculate the erank). 
+        Each row contains the parameters of a (pretrained) model flattened as a vector."""
         delta_end_params = nn.utils.parameters_to_vector(model.parameters())  # not detached!
-        if self._use_abs_model_params:
+        if use_abs_model_params:
+            # concatenate absolute model parameters
             delta = delta_end_params
         else:
+            # concatenate last update step
             delta = delta_end_params - self._delta_start_params_queue[0]
         directions_matrix = torch.cat([delta.unsqueeze(dim=0), self._directions_buffer],
                                       dim=0)  # shape: (n_directions, n_model_parameters)
-        if self._normalize_directions:
+        if normalize_matrix:
             directions_matrix = directions_matrix / torch.linalg.norm(directions_matrix, ord=2, dim=1, keepdim=True)
         return directions_matrix
 
@@ -121,7 +135,8 @@ class EffectiveRankRegularization(nn.Module):
         # Apply erank regularization only if directions buffer is full and we have a first step in the delta_start_params_queue
         if self._directions_buffer.shape[0] < self.buffer_size or len(self._delta_start_params_queue) < 2:
             return torch.tensor(0.0, dtype=torch.float32, device=self._device)
-        directions_matrix = self._construct_directions_matrix(model)
+        directions_matrix = self._construct_directions_matrix(
+            model, self._use_abs_model_params, self._normalize_directions)
         return EffectiveRankRegularization.erank(directions_matrix)
 
     @staticmethod

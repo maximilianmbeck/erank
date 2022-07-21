@@ -44,10 +44,10 @@ config:
 
   model:
     name: cnn2d
-    out_channels: 128
+    out_channels: 64
     model_kwargs:
-      image_size: 28
-      input_channels: 1
+      image_size: 32
+      input_channels: 3
       act_fn: relu
       layer_configs:
         - out_channels: ${config.model.out_channels}
@@ -91,6 +91,7 @@ config:
       buffer_size: 10 # number of directions stored in the buffer
       norm_directions: False
       use_abs_model_params: True
+      log_normalized_erank: True
     num_workers: 4
 
   # data: 
