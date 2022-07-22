@@ -41,14 +41,12 @@ class Trainer(BaseTrainer):
     def _setup(self):
         LOGGER.info('Starting wandb.')
         exp_data = self.config.experiment_data
-        # add wandb config: need to convert to python native dict
         wandb.init(project=exp_data.project_name, name=HydraConfig.get().job.name, dir=Path.cwd(),
                    config=OmegaConf.to_container(self.config, resolve=True, throw_on_missing=True),
                    tags=self.config.wandb.tags, notes=self.config.wandb.notes,
                    settings=wandb.Settings(start_method='fork'))
 
     def _create_datasets(self) -> None:
-        # create fashion mnist datasets
         LOGGER.info('Loading train/val dataset.')
         data_cfg = self.config.data
         provide_dataset = get_dataset_provider(dataset_name=data_cfg.dataset)
