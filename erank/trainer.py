@@ -41,9 +41,9 @@ class Trainer(BaseTrainer):
     def _setup(self):
         LOGGER.info('Starting wandb.')
         exp_data = self.config.experiment_data
-        wandb.init(project=exp_data.project_name, name=HydraConfig.get().job.name, dir=Path.cwd(),
+        wandb.init(entity=exp_data.get('entity', None), project=exp_data.project_name, name=HydraConfig.get().job.name, dir=Path.cwd(),
                    config=OmegaConf.to_container(self.config, resolve=True, throw_on_missing=True),
-                   tags=self.config.wandb.tags, notes=self.config.wandb.notes,
+                   **self.config.wandb.init,
                    settings=wandb.Settings(start_method='fork'))
 
     def _create_datasets(self) -> None:

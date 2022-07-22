@@ -19,6 +19,7 @@ sweep:
 ### 
 config:
   experiment_data:
+    entity: null # jkuiml-fsl
     project_name: erank_supervised
     experiment_tag: '5.19'
     experiment_name: f_mnist-${config.experiment_data.experiment_tag}-fc_pretrain_different_inits-taskidx_${config.data.dataset_split.train_task_idx}
@@ -27,12 +28,15 @@ config:
     gpu_id: 2
 
   wandb:
-    tags: # list(), used to tag wandblogger
-      - ${config.experiment_data.experiment_tag}_exps
-      - erank
-      - absmodel
-    notes: # str, used to make notes to wandblogger
-    
+    init:
+      tags: # list(), used to tag wandblogger
+        - ${config.experiment_data.experiment_tag}_exps
+        - erank
+        - absmodel
+      notes: # str, used to make notes to wandblogger
+      group: ${config.experiment_data.experiment_tag} # null 
+      job_type: pretrain # examples: hypsearch, pretrain, eval, etc. 
+          
     watch:
       log: parameters #null #all
       log_freq: 5000

@@ -27,7 +27,9 @@ hydra:
 ### 
 config:
   experiment_data:
+    entity: null # jkuiml-fsl
     project_name: erank_supervised
+    experiment_tag: 'x.yy'
     experiment_name: f_mnist-erank-DEBUG
     experiment_dir: null
     seed: 0

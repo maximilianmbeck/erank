@@ -27,20 +27,26 @@ hydra:
 ### 
 config:
   experiment_data:
+    entity: null # jkuiml-fsl
     project_name: erank_supervised
-    experiment_name: f_mnist-erank-DEBUG
+    experiment_tag: 'x.yy'
+    experiment_name: cf10-erank-DEBUG
     experiment_dir: null
     seed: 0
     gpu_id: 0
 
   wandb:
-    tags: # list(), used to tag wandblogger
-      - DEBUG
-    notes: Trying different things. # str, used to make notes to wandblogger
-    
+    init:
+      tags: # list(), used to tag wandblogger
+        - ${config.experiment_data.experiment_tag}_exps
+        - DEBUG
+      notes: # str, used to make notes to wandblogger
+      group: ${config.experiment_data.experiment_tag} # null 
+      job_type: pretrain # examples: hypsearch, pretrain, eval, etc. 
+          
     watch:
-      log: all
-      log_freq: 100
+      log: parameters #null #all
+      log_freq: 5000
 
   model:
     name: cnn2d
