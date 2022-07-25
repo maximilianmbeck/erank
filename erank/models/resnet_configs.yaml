@@ -1,0 +1,46 @@
+resnet18-imagenet: # num parameters: 11,689,512 (w/o bias (default)) -> 11,694,248 (w/ bias)
+  in_channels: 3
+  act_fn: relu
+  residual_option: B
+  input_layer_config:
+    kernel_size: 7
+    out_channels: 64
+    batch_norm: true
+    bias: false
+    stride: 2
+    padding: 6
+    max_pool_kernel_size: 3
+    max_pool_stride: 2
+    max_pool_padding: 1
+  resnet_blocks_config:
+    - out_channels: 64
+      num_residual_blocks: 2
+    - out_channels: 128
+      num_residual_blocks: 2
+    - out_channels: 256
+      num_residual_blocks: 2
+    - out_channels: 512
+      num_residual_blocks: 2
+  linear_output_units:
+    - 1000
+
+resnet20-cifar10: # num parameters: 269,722 (w/o bias (default)) -> 270,394 (w/ bias)
+  in_channels: 3
+  act_fn: relu
+  residual_option: A
+  input_layer_config:
+      kernel_size: 3
+      out_channels: 16
+      bias: false
+      batch_norm: true
+      stride: 1
+      padding: 1
+  resnet_blocks_config:
+    - out_channels: 16
+      num_residual_blocks: 3
+    - out_channels: 32
+      num_residual_blocks: 3
+    - out_channels: 64
+      num_residual_blocks: 3
+  linear_output_units:
+    - 10
