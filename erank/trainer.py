@@ -1,4 +1,5 @@
 import logging
+import sys
 from typing import Any, Dict
 import wandb
 import torch
@@ -120,7 +121,7 @@ class Trainer(BaseTrainer):
             loss_vals.update(dict(loss_erank=[]))
 
         # training loop (iterations per epoch)
-        pbar = tqdm(self._loaders['train'], desc=f'Train epoch {epoch}')
+        pbar = tqdm(self._loaders['train'], desc=f'Train epoch {epoch}', file=sys.stdout)
         for xs, ys in pbar:
             xs, ys = xs.to(self.device), ys.to(self.device)
             # forward pass
@@ -199,7 +200,7 @@ class Trainer(BaseTrainer):
 
         val_losses = []
 
-        pbar = tqdm(self._loaders['val'], desc=f'Val epoch {epoch}')
+        pbar = tqdm(self._loaders['val'], desc=f'Val epoch {epoch}', file=sys.stdout)
         for xs, ys in pbar:
             xs, ys = xs.to(self.device), ys.to(self.device)
 
