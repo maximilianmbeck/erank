@@ -1,19 +1,17 @@
-// {
-//     "python.linting.enabled": false,
-//     "python.linting.pylintEnabled": true,
-//     "python.formatting.provider": "autopep8",
-//     "python.formatting.autopep8Args": [
-//         "--max-line-length",
-//         "120",
-//         "--ignore",
-//         "E402"
-//     ],
-//     "files.watcherExclude": {
-//         "**/.git/objects/**": true,
-//         "**/.git/subtree-cache/**": true,
-//         "**/node_modules/*/**": true,
-//         "**/.hg/store/**": true, 
-//         "**/runs/**": true, 
-//         "**/experiments/**": true 
-//     }
-// }
+{
+    "python.linting.enabled": false,
+    "python.linting.pylintEnabled": true,
+    "python.formatting.provider": "yapf",
+    "files.watcherExclude": {
+        "**/.git/objects/**": true,
+        "**/.git/subtree-cache/**": true,
+        "**/node_modules/*/**": true,
+        "**/.hg/store/**": true, 
+        "**/runs/**": true, 
+        "**/experiments/**": true 
+    },
+    "python.formatting.yapfArgs": [
+        "--style",
+        "{based_on_style: google, column_limit: 120, indent_width: 4}"
+    ]
+}
