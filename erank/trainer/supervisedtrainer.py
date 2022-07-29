@@ -25,7 +25,7 @@ from erank.regularization import EffectiveRankRegularization
 LOGGER = logging.getLogger(__name__)
 
 
-class Trainer(BaseTrainer):
+class SupervisedTrainer(BaseTrainer):
 
     def __init__(self, config: DictConfig):
         self.config = config
