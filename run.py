@@ -4,7 +4,7 @@ import hydra
 import logging
 from omegaconf import DictConfig, OmegaConf
 
-from erank.trainer import Trainer
+from erank.trainer import Trainer, get_trainer
 LOGGER = logging.getLogger(__name__)
 
 
@@ -13,7 +13,8 @@ def run_experiment(cfg: DictConfig):
     LOGGER.info(f'Starting experiment with config: \n{OmegaConf.to_yaml(cfg)}')
     cfg = cfg.config
     cfg.experiment_data.experiment_dir = Path().cwd()
-    trainer = Trainer(config=cfg)
+    trainer_class = get_trainer(cfg.trainer.training_setup)
+    trainer = trainer_class(config=cfg)
     trainer.train()
 
 

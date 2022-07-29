@@ -1,11 +1,12 @@
 from typing import Callable
 from omegaconf import DictConfig
 import torch.utils.data as data
+from erank.trainer.episodictrainer import ReptileTrainer
 
 from erank.trainer.supervisedtrainer import SupervisedTrainer
 
 
-_trainer_registry = {'supervised': SupervisedTrainer, 'reptile': prepare_cifar10}
+_trainer_registry = {'supervised': SupervisedTrainer, 'reptile': ReptileTrainer}
 
 def get_trainer(training_setup: str) -> Callable[[DictConfig], data.Dataset]:
     if training_setup in _trainer_registry:

@@ -14,8 +14,16 @@ from erank.regularization import EffectiveRankRegularization
 LOGGER = logging.getLogger(__name__)
 
 class ErankBaseTrainer(BaseTrainer):
+    """Abstract trainer for this project. Collects all common functionalitites across trainers.
+
+    Funcionality is further specialized in child classes.
+
+    Args:
+        config (DictConfig): The configuration.
+    """
 
     def __init__(self, config: DictConfig):
+
         self.config = config
         super().__init__(experiment_dir=config.experiment_data.experiment_dir,
                          seed=config.experiment_data.seed,

@@ -20,9 +20,15 @@ LOGGER = logging.getLogger(__name__)
 
 
 class SupervisedTrainer(ErankBaseTrainer):
+    """Class for training in a supervised setting.
+
+    Args:
+        config (DictConfig): Configuration.
+    """
 
     def __init__(self, config: DictConfig):
         super().__init__(config)
+        LOGGER.info('Using Supervised Trainer.')
 
     def _create_datasets(self) -> None:
         LOGGER.info('Loading train/val dataset.')
