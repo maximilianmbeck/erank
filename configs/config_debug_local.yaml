@@ -53,7 +53,7 @@ config:
     out_channels: 64
     model_kwargs:
       image_size: 32
-      input_channels: 3
+      in_channels: 3
       act_fn: relu
       layer_configs:
         - out_channels: ${config.model.out_channels}
@@ -78,6 +78,7 @@ config:
         - 10
 
   trainer:
+    training_setup: supervised
     n_epochs: 300
     val_every: 1
     save_every: 50
@@ -122,4 +123,4 @@ config:
       subsplit_first_n_train_tasks: 0
       num_subsplit_tasks: 0
       train_task_idx: 10
-      restrict_n_samples_train_task: 100
+      restrict_n_samples_train_task: -1

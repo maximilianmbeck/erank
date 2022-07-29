@@ -4,7 +4,7 @@ import hydra
 import logging
 from omegaconf import DictConfig, OmegaConf
 
-from erank.trainer import Trainer, get_trainer_class
+from erank.trainer import get_trainer_class
 LOGGER = logging.getLogger(__name__)
 
 

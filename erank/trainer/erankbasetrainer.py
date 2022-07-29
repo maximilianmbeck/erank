@@ -1,9 +1,12 @@
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, List, Union
+import torch
 import wandb
+import pandas as pd
 from torch import nn
 from omegaconf import DictConfig, OmegaConf
 from pathlib import Path
+from ml_utilities.utils import convert_dict_to_python_types
 from ml_utilities.torch_models import get_model_class
 from ml_utilities.torch_utils import get_loss
 from ml_utilities.trainers.basetrainer import BaseTrainer
@@ -84,6 +87,35 @@ class ErankBaseTrainer(BaseTrainer):
         else:
             raise ValueError(f'Unknown erank type: {erank_cfg.type}')
         return erank_reg
+
+    def _finish_train_epoch(self, epoch: int, losses_epoch: Dict[str, List[float]],
+                            metrics_epoch: Dict[str, Union[float, torch.Tensor]]) -> None:
+        for loss_name, loss_val_list in losses_epoch.items():
+            losses_epoch[loss_name] = torch.tensor(loss_val_list).mean().item()
+
+        log_dict = {'epoch': epoch, 'train_step': self._train_step,
+                    **losses_epoch, **metrics_epoch}
+        wandb.log({'train_epoch/': log_dict})
+
+        LOGGER.info(f'Train epoch \n{pd.Series(convert_dict_to_python_types(log_dict), dtype=float)}')
+
+        self._reset_metrics()
+
+    def _finish_val_epoch(self, epoch: int, losses_epoch: Dict[str, List[float]],
+                            metrics_epoch: Dict[str, Union[float, torch.Tensor]]) -> float:
+        for loss_name, loss_val_list in losses_epoch.items():
+            losses_epoch[loss_name] = torch.tensor(loss_val_list).mean().item()
+
+        # log epoch
+        log_dict = {'epoch': epoch, **losses_epoch, **metrics_epoch}
+        wandb.log({'val/': log_dict})
+
+        LOGGER.info(f'Val epoch \n{pd.Series(convert_dict_to_python_types(log_dict), dtype=float)}')
+
+        # val_score is first metric in self._val_metrics
+        val_score = metrics_epoch[next(iter(self._val_metrics.items()))[0]].item()
+        self._reset_metrics()
+        return val_score
 
     def _final_hook(self, final_results: Dict[str, Any], *args, **kwargs):
         wandb.run.summary.update(final_results)

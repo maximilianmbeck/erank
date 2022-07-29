@@ -2,7 +2,7 @@ import logging
 import sys
 import pandas as pd
 import torch
-import torch.utils.data as data
+from torch import nn
 
 from omegaconf import DictConfig
 from tqdm import tqdm
@@ -22,21 +22,10 @@ class ReptileTrainer(ErankBaseTrainer):
         LOGGER.info('Loading train/val dataset.')
         data_cfg = self.config.data
         # these are datasets of tasks
-        # each task returns two dataloaders for support and query set
+        # each task has a support and a query set
         train_tasks = ...
         val_tasks = ...
         self._datasets = dict(train=train_tasks, val=val_tasks)
-
-    def _create_dataloaders(self) -> None:
-        # these dataloaders return a batch of tasks
-        # train_loader = data.DataLoader(
-        #     dataset=self._datasets['train'],
-        #     batch_size=self.config.trainer.batch_size, shuffle=True, drop_last=False,
-        #     num_workers=self.config.trainer.num_workers)
-        # val_loader = data.DataLoader(dataset=self._datasets['val'], batch_size=self.config.trainer.batch_size,
-        #                              shuffle=True, drop_last=False, num_workers=self.config.trainer.num_workers)
-        
-        self._loaders = dict(train=train_loader, val=val_loader)
 
     def _create_metrics(self) -> None:
         LOGGER.info('Creating metrics.')
@@ -70,3 +59,33 @@ class ReptileTrainer(ErankBaseTrainer):
         LOGGER.info(f'Train epoch \n{pd.Series(convert_dict_to_python_types(log_dict), dtype=float)}')
 
         self._reset_metrics()
+
+    def _val_epoch(self, epoch: int, trained_model: nn.Module) -> float:
+
+        val_losses = []
+
+        pbar = tqdm(self._loaders['val'], desc=f'Val epoch {epoch}', file=sys.stdout)
+        for xs, ys in pbar:
+            xs, ys = xs.to(self.device), ys.to(self.device)
+
+            with torch.no_grad():
+                y_pred = trained_model(xs)
+
+                loss = self._loss(y_pred, ys)
+                val_losses.append(loss.item())
+                m_val = self._val_metrics(y_pred, ys)
+
+        # compute mean metrics over dataset
+        metric_vals = self._val_metrics.compute()
+
+        # log epoch
+        log_dict = {'epoch': epoch, 'loss': torch.tensor(val_losses).mean().item(), **metric_vals}
+        wandb.log({'val/': log_dict})
+
+        LOGGER.info(f'Val epoch \n{pd.Series(convert_dict_to_python_types(log_dict), dtype=float)}')
+
+        # val_score is first metric in self._val_metrics
+        val_score = metric_vals[next(iter(self._val_metrics.items()))[0]].item()
+
+        self._reset_metrics()
+        return val_score
