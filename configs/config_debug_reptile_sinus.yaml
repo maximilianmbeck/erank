@@ -1,5 +1,6 @@
 defaults:
   - hydra: jobname_outputdir_format
+  - _self_
 #######
 
 run_config: 
@@ -85,19 +86,19 @@ config:
   data: 
     metadataset: sinus
     train_metadataset_kwargs:
-        support_size: 10
-        query_size: 50
-        num_tasks: 10000
-        amplitude_range: [0.1, 5.0]
-        phase_range: [0, 6.283185307]
-        x_range: [-5, 5]
-        regenerate_task_support_set: False
+      support_size: 10
+      query_size: 50
+      num_tasks: 10000
+      amplitude_range: [0.1, 5.0]
+      phase_range: [0, 6.283185307]
+      x_range: [-5, 5]
+      regenerate_task_support_set: False
     val_metadataset_kwargs:
-        support_size: 10
-        query_size: 50
-        num_tasks: 1000
-        amplitude_range: [0.1, 5.0]
-        phase_range: [0, 6.283185307]
-        x_range: [-5, 5]
-        regenerate_task_support_set: False
+      support_size: 10
+      query_size: 50
+      num_tasks: 1000
+      amplitude_range: [0.1, 5.0]
+      phase_range: [0, 6.283185307]
+      x_range: [-5, 5]
+      regenerate_task_support_set: False
     

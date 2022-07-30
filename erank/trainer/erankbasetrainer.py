@@ -19,7 +19,7 @@ LOGGER = logging.getLogger(__name__)
 class ErankBaseTrainer(BaseTrainer):
     """Abstract trainer for this project. Collects all common functionalitites across trainers.
 
-    Funcionality is further specialized in child classes.
+    Functionality is further specialized in child classes.
 
     Args:
         config (DictConfig): The configuration.
@@ -41,7 +41,10 @@ class ErankBaseTrainer(BaseTrainer):
     def _setup(self):
         LOGGER.info('Starting wandb.')
         exp_data = self.config.experiment_data
-        wandb.init(entity=exp_data.get('entity', None), project=exp_data.project_name, name=HydraConfig.get().job.name, dir=Path.cwd(),
+        wandb.init(entity=exp_data.get('entity', None),
+                   project=exp_data.project_name,
+                   name=HydraConfig.get().job.name,
+                   dir=Path.cwd(),
                    config=OmegaConf.to_container(self.config, resolve=True, throw_on_missing=True),
                    **self.config.wandb.init,
                    settings=wandb.Settings(start_method='fork'))
@@ -54,13 +57,13 @@ class ErankBaseTrainer(BaseTrainer):
             self._model = model_class.load(self.config.trainer.init_model, device=self.device)
         else:
             self._model = model_class(**self.config.model.model_kwargs)
-        
+
         wandb.watch(self._model, **self.config.wandb.watch)
 
     def _create_optimizer_and_scheduler(self, model: nn.Module) -> None:
         LOGGER.info('Creating optimizer and scheduler.')
-        self._optimizer, self._lr_scheduler = create_optimizer_and_scheduler(
-            model.parameters(), **self.config.trainer.optimizer_scheduler)
+        self._optimizer, self._lr_scheduler = create_optimizer_and_scheduler(model.parameters(),
+                                                                             **self.config.trainer.optimizer_scheduler)
 
     def _create_loss(self) -> None:
         LOGGER.info('Creating loss.')
@@ -76,10 +79,11 @@ class ErankBaseTrainer(BaseTrainer):
             LOGGER.info('No erank regularizer.')
         elif erank_cfg.type in ['random', 'pretraindiff']:
             LOGGER.info(f'Erank regularization of type {erank_cfg.type}.')
-            erank_reg = EffectiveRankRegularization(
-                buffer_size=erank_cfg.buffer_size, init_model=model, loss_weight=erank_cfg.loss_weight,
-                normalize_directions=erank_cfg.get('norm_directions', False),
-                use_abs_model_params=erank_cfg.get('use_abs_model_params', True))
+            erank_reg = EffectiveRankRegularization(buffer_size=erank_cfg.buffer_size,
+                                                    init_model=model,
+                                                    loss_weight=erank_cfg.loss_weight,
+                                                    normalize_directions=erank_cfg.get('norm_directions', False),
+                                                    use_abs_model_params=erank_cfg.get('use_abs_model_params', True))
             if erank_cfg.type == 'random':
                 erank_reg.init_directions_buffer(random_buffer=True)
             elif erank_cfg.type == 'pretraindiff':
@@ -88,21 +92,25 @@ class ErankBaseTrainer(BaseTrainer):
             raise ValueError(f'Unknown erank type: {erank_cfg.type}')
         return erank_reg
 
-    def _finish_train_epoch(self, epoch: int, losses_epoch: Dict[str, List[float]],
-                            metrics_epoch: Dict[str, Union[float, torch.Tensor]]) -> None:
+    def _finish_train_epoch(self,
+                            epoch: int,
+                            losses_epoch: Dict[str, List[float]] = {},
+                            metrics_epoch: Dict[str, Union[float, torch.Tensor]] = {}) -> None:
         for loss_name, loss_val_list in losses_epoch.items():
-            losses_epoch[loss_name] = torch.tensor(loss_val_list).mean().item()
+            if isinstance(loss_val_list, list):
+                losses_epoch[loss_name] = torch.tensor(loss_val_list).mean().item()
 
-        log_dict = {'epoch': epoch, 'train_step': self._train_step,
-                    **losses_epoch, **metrics_epoch}
+        log_dict = {'epoch': epoch, 'train_step': self._train_step, **losses_epoch, **metrics_epoch}
         wandb.log({'train_epoch/': log_dict})
 
         LOGGER.info(f'Train epoch \n{pd.Series(convert_dict_to_python_types(log_dict), dtype=float)}')
 
         self._reset_metrics()
 
-    def _finish_val_epoch(self, epoch: int, losses_epoch: Dict[str, List[float]],
-                            metrics_epoch: Dict[str, Union[float, torch.Tensor]]) -> float:
+    def _finish_val_epoch(self,
+                          epoch: int,
+                          losses_epoch: Dict[str, List[float]] = {},
+                          metrics_epoch: Dict[str, Union[float, torch.Tensor]] = {}) -> float:
         for loss_name, loss_val_list in losses_epoch.items():
             losses_epoch[loss_name] = torch.tensor(loss_val_list).mean().item()
 

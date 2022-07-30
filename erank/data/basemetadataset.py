@@ -61,5 +61,9 @@ class BaseMetaDataset(object):
     def sample_tasks(self, num_tasks: int) -> Iterable[Task]:
         pass
 
+    @abstractmethod
+    def get_tasks(self, num_tasks: int = -1) -> List[Task]:
+        pass
+
     def __len__(self) -> int:
         self.num_tasks
