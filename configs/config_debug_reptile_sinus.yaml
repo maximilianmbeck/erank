@@ -55,17 +55,23 @@ config:
 
   trainer:
     training_setup: reptile
-    n_epochs: 50
+    n_epochs: 50 # number of iterations (outer/meta gradient steps)
     val_every: 1
     save_every: 100
     early_stopping_patience: 10
-    batch_size: 256
+    batch_size: 256 # meta-batch size (number of tasks sampled per iteration)
     optimizer_scheduler:
       optimizer_name: adamw
       optimizer_kwargs:
         lr: 0.001
         weight_decay: 0.0 #0.001
     init_model: null
+    inner_optimizer: 
+      optimizer_name: sgd
+      optimizer_kwargs:
+        lr: 0.01
+    n_inner_iter: 5
+
     loss: crossentropy
     erank:
       type: none #pretraindiff #none #random #pretraindiff
@@ -77,12 +83,21 @@ config:
     num_workers: 4
 
   data: 
-    dataset: fashion_mnist
-    dataset_kwargs:
-      dataset_dir: /system/user/beck/pwbeck/data/mnist
-    dataset_split:
-      train_val_split: 0.8
-      num_train_tasks: 13
-      subsplit_first_n_train_tasks: 0
-      num_subsplit_tasks: 0
-      train_task_idx: XXX
+    metadataset: sinus
+    train_metadataset_kwargs:
+        support_size: 10
+        query_size: 50
+        num_tasks: 10000
+        amplitude_range: [0.1, 5.0]
+        phase_range: [0, 6.283185307]
+        x_range: [-5, 5]
+        regenerate_task_support_set: False
+    val_metadataset_kwargs:
+        support_size: 10
+        query_size: 50
+        num_tasks: 1000
+        amplitude_range: [0.1, 5.0]
+        phase_range: [0, 6.283185307]
+        x_range: [-5, 5]
+        regenerate_task_support_set: False
+    
