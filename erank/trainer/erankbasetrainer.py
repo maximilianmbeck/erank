@@ -58,7 +58,7 @@ class ErankBaseTrainer(BaseTrainer):
         wandb.watch(self._model, **self.config.wandb.watch)
 
     def _create_optimizer_and_scheduler(self, model: nn.Module) -> None:
-        LOGGER.info('Create optimizer and scheduler.')
+        LOGGER.info('Creating optimizer and scheduler.')
         self._optimizer, self._lr_scheduler = create_optimizer_and_scheduler(
             model.parameters(), **self.config.trainer.optimizer_scheduler)
 

@@ -6,9 +6,11 @@ from torch import nn
 import pandas as pd
 
 from omegaconf import DictConfig
+import torchmetrics
 from tqdm import tqdm
 import wandb
 from erank.data import get_metadataset_class
+from erank.data.basemetadataset import support_query_as_minibatch
 from erank.trainer.erankbasetrainer import ErankBaseTrainer
 from ml_utilities.utils import convert_dict_to_python_types, zip_strict
 from ml_utilities.torch_utils.factory import create_optimizer_and_scheduler
@@ -35,9 +37,13 @@ class ReptileTrainer(ErankBaseTrainer):
         val_tasks = metadataset_class(**data_cfg.val_metadataset_kwargs)
         self._datasets = dict(train=train_tasks, val=val_tasks)
 
+    def _create_dataloaders(self) -> None:
+        # does nothing, for compatibility reasons
+        self._loaders = {}
+
     def _create_metrics(self) -> None:
         LOGGER.info('Creating metrics.')
-        metrics = ... # TODO add metrics
+        metrics = torchmetrics.MetricCollection([torchmetrics.MeanSquaredError()]) # TODO make generic and configurable
         self._train_metrics = metrics.clone()  # prefix='train_'
         self._val_metrics = metrics.clone()  # prefix='val_'
 
@@ -58,13 +64,13 @@ class ReptileTrainer(ErankBaseTrainer):
             support_set, query_set = task.support_set, task.query_set
             
             # copy model parameters and init inner optimizer
-            inner_model = copy.deepcopy(self._model) # TODO check if model still on same device
+            inner_model = copy.deepcopy(self._model)
             inner_model.train(True)
             inner_optimizer, _ = create_optimizer_and_scheduler(inner_model.parameters(), **self._inner_optimizer)
             inner_optimizer.zero_grad()
             # do inner-loop optimization
             for i in range(self._n_inner_iter):
-                xs, ys = support_set[0].to(self.device), support_set[1].to(self.device)
+                xs, ys = support_query_as_minibatch(support_set, self.device)
                 # forward pass
                 ys_pred = inner_model(xs)
                 loss = self._loss(ys_pred, ys)
@@ -84,7 +90,7 @@ class ReptileTrainer(ErankBaseTrainer):
                     meta_model_param.grad.add_(g)
 
             # eval on query set with inner-loop optimized model
-            xq, yq = query_set[0].to(self.device), query_set[1].to(self.device)
+            xq, yq = support_query_as_minibatch(query_set, self.device)
             inner_model.train(False)
             yq_pred = inner_model(xq)
             meta_loss = self._loss(yq_pred, yq)
@@ -142,5 +148,5 @@ class ReptileTrainer(ErankBaseTrainer):
         # val_score = metric_vals[next(iter(self._val_metrics.items()))[0]].item()
 
         # self._reset_metrics()
-        val_score = 0
+        val_score = 0.
         return val_score

@@ -6,10 +6,25 @@ import torch
 SUPPORT_X_KEY = QUERY_X_KEY = 'x'
 SUPPORT_Y_KEY = QUERY_Y_KEY = 'y'
 
+def support_query_as_minibatch(set: Tuple[torch.Tensor, torch.Tensor], device: torch.device) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Checks dimensions of tensors in the set and moves them to the given device.
+
+    Args:
+        set (Tuple[torch.Tensor, torch.Tensor]): support or query set
+        device (torch.device): 
+
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor]: set on correct device.
+    """
+    def fun(x):
+        assert len(x.shape) > 1, 'Tensor as too less dimensions. Maybe batch dimension missing?'
+        return x.to(device)
+    return tuple(map(fun, set))
 
 class Task(object):
 
     def __init__(self, support_set: Dict[str, torch.Tensor] = {}, query_set: Dict[str, torch.Tensor] = {}):
+        # Tensors must have batch dimension
         self._support_data = support_set
         self._query_data = query_set
 

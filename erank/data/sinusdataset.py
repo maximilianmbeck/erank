@@ -29,13 +29,13 @@ class SinusTask(Task):
 
     def _generate_support_set(self) -> None:
         # uniform sampling of the support set
-        support_x = torch.Tensor(np.random.default_rng().uniform(self.x_range[0], self.x_range[1], self._support_size))
+        support_x = torch.as_tensor(np.random.default_rng().uniform(self.x_range[0], self.x_range[1], (self._support_size, 1)), dtype=torch.float32)
         self._support_data[SUPPORT_Y_KEY] = self.sinus_func(support_x)
         self._support_data[SUPPORT_X_KEY] = support_x
 
     def _generate_query_set(self) -> None:
         # query set consists of equidistant distributed points in x
-        query_x = torch.linspace(self.x_range[0], self.x_range[1], self._query_size)
+        query_x = torch.linspace(self.x_range[0], self.x_range[1], self._query_size).reshape(-1, 1)
         self._query_data[QUERY_Y_KEY] = self.sinus_func(query_x)
         self._query_data[QUERY_X_KEY] = query_x
 

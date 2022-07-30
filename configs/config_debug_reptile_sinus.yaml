@@ -25,7 +25,7 @@ config:
     experiment_name: sinus-${config.experiment_data.experiment_tag}-reptile_sign_of_life
     experiment_dir: null
     seed: 0
-    gpu_id: 2
+    gpu_id: 0
 
   wandb:
     init:
@@ -59,7 +59,7 @@ config:
     val_every: 1
     save_every: 100
     early_stopping_patience: 10
-    batch_size: 256 # meta-batch size (number of tasks sampled per iteration)
+    batch_size: 5 # meta-batch size (number of tasks sampled per iteration)
     optimizer_scheduler:
       optimizer_name: adamw
       optimizer_kwargs:
@@ -72,7 +72,7 @@ config:
         lr: 0.01
     n_inner_iter: 5
 
-    loss: crossentropy
+    loss: mse
     erank:
       type: none #pretraindiff #none #random #pretraindiff
       loss_weight: XXX
