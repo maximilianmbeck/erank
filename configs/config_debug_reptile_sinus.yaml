@@ -62,7 +62,7 @@ config:
     early_stopping_patience: 10
     batch_size: 5 # meta-batch size (number of tasks sampled per iteration)
     optimizer_scheduler:
-      optimizer_name: adamw
+      optimizer_name: sgd #adamw # TODO implement optimizer state sharing between inner loops
       optimizer_kwargs:
         lr: 0.001
         weight_decay: 0.0 #0.001
@@ -88,7 +88,7 @@ config:
     train_metadataset_kwargs:
       support_size: 10
       query_size: 50
-      num_tasks: 10000
+      num_tasks: 100 #10000
       amplitude_range: [0.1, 5.0]
       phase_range: [0, 6.283185307]
       x_range: [-5, 5]
@@ -96,7 +96,7 @@ config:
     val_metadataset_kwargs:
       support_size: 10
       query_size: 50
-      num_tasks: 1000
+      num_tasks: 10 #1000
       amplitude_range: [0.1, 5.0]
       phase_range: [0, 6.283185307]
       x_range: [-5, 5]

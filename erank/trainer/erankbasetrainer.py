@@ -94,36 +94,34 @@ class ErankBaseTrainer(BaseTrainer):
 
     def _finish_train_epoch(self,
                             epoch: int,
-                            losses_epoch: Dict[str, List[float]] = {},
+                            losses_epoch: Dict[str, Union[List[float], float]] = {},
                             metrics_epoch: Dict[str, Union[float, torch.Tensor]] = {}) -> None:
-        for loss_name, loss_val_list in losses_epoch.items():
-            if isinstance(loss_val_list, list):
-                losses_epoch[loss_name] = torch.tensor(loss_val_list).mean().item()
-
-        log_dict = {'epoch': epoch, 'train_step': self._train_step, **losses_epoch, **metrics_epoch}
-        wandb.log({'train_epoch/': log_dict})
-
-        LOGGER.info(f'Train epoch \n{pd.Series(convert_dict_to_python_types(log_dict), dtype=float)}')
-
+        self._log_losses_metrics('train', epoch, losses_epoch, metrics_epoch)
         self._reset_metrics()
 
     def _finish_val_epoch(self,
                           epoch: int,
-                          losses_epoch: Dict[str, List[float]] = {},
+                          losses_epoch: Dict[str, Union[List[float], float]] = {},
                           metrics_epoch: Dict[str, Union[float, torch.Tensor]] = {}) -> float:
-        for loss_name, loss_val_list in losses_epoch.items():
-            losses_epoch[loss_name] = torch.tensor(loss_val_list).mean().item()
-
-        # log epoch
-        log_dict = {'epoch': epoch, **losses_epoch, **metrics_epoch}
-        wandb.log({'val/': log_dict})
-
-        LOGGER.info(f'Val epoch \n{pd.Series(convert_dict_to_python_types(log_dict), dtype=float)}')
+        self._log_losses_metrics('val', epoch, losses_epoch, metrics_epoch)
 
         # val_score is first metric in self._val_metrics
         val_score = metrics_epoch[next(iter(self._val_metrics.items()))[0]].item()
         self._reset_metrics()
         return val_score
+
+    def _log_losses_metrics(self, prefix: str, epoch: int, losses_epoch: Dict[str, Union[List[float], float]] = {},
+                          metrics_epoch: Dict[str, Union[float, torch.Tensor]] = {}) -> None:
+        for loss_name, loss_vals in losses_epoch.items():
+            if isinstance(loss_vals, list):
+                losses_epoch[loss_name] = torch.tensor(loss_vals).mean().item()
+
+        # log epoch
+        log_dict = {'epoch': epoch, 'train_step': self._train_step, **losses_epoch, **metrics_epoch}
+        wandb.log({f'{prefix}/': log_dict})
+
+        LOGGER.info(f'{prefix} epoch \n{pd.Series(convert_dict_to_python_types(log_dict), dtype=float)}')
+
 
     def _final_hook(self, final_results: Dict[str, Any], *args, **kwargs):
         wandb.run.summary.update(final_results)

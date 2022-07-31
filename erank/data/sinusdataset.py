@@ -1,7 +1,11 @@
+import sys
+from matplotlib.figure import Figure
 import torch
 import copy
 import numpy as np
-from typing import Iterable, List, Tuple
+from typing import List, Tuple
+
+from tqdm import tqdm
 from erank.data.basemetadataset import QUERY_X_KEY, QUERY_Y_KEY, SUPPORT_X_KEY, SUPPORT_Y_KEY, BaseMetaDataset, Task
 
 import matplotlib.pyplot as plt
@@ -26,10 +30,16 @@ class SinusTask(Task):
 
         self._generate_support_set()
         self._generate_query_set()
+    
+    @property
+    def name(self) -> str:
+        return f'Ampl_{self.amplitude:2.4f}-Phase_{self.phase:2.4f}'
 
     def _generate_support_set(self) -> None:
         # uniform sampling of the support set
-        support_x = torch.as_tensor(np.random.default_rng().uniform(self.x_range[0], self.x_range[1], (self._support_size, 1)), dtype=torch.float32)
+        support_x = torch.as_tensor(np.random.default_rng().uniform(self.x_range[0], self.x_range[1],
+                                                                    (self._support_size, 1)),
+                                    dtype=torch.float32)
         self._support_data[SUPPORT_Y_KEY] = self.sinus_func(support_x)
         self._support_data[SUPPORT_X_KEY] = support_x
 
@@ -42,8 +52,9 @@ class SinusTask(Task):
     def sinus_func(self, x: torch.Tensor) -> torch.Tensor:
         return self.amplitude * torch.sin(x + self.phase)
 
-    def plot_query(self):
-        plt.plot(self.query_set[0].numpy(), self.query_set[1].numpy())
+    def plot_query_predictions(self, preds_before_learning: torch.Tensor, preds_after_learning: torch.Tensor) -> Figure:
+        # plt.plot(self.query_set[0].numpy(), self.query_set[1].numpy())
+        pass
 
     @property
     def support_set(self) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -80,9 +91,17 @@ class SinusDataset(BaseMetaDataset):
                           self.amplitudes[i],
                           self.phases[i],
                           self.x_range,
-                          regenerate_support_set=self.regenerate_task_support_set)) for i in range(self.num_tasks)
+                          regenerate_support_set=self.regenerate_task_support_set))
+            for i in tqdm(range(self.num_tasks), file=sys.stdout, desc='Generating Sinus tasks')
         ]
 
-    def sample_tasks(self, num_tasks: int) -> Iterable[SinusTask]:
+    def sample_tasks(self, num_tasks: int) -> List[SinusTask]:
         # task_idxes = np.random.default_rng().integers(len(self.tasks), size=num_tasks)
-        return np.random.default_rng().choice(self.tasks, size=num_tasks, replace=False)
+        if num_tasks == -1:
+            num_tasks = len(self.tasks)
+        return np.random.default_rng().choice(self.tasks, size=num_tasks, replace=False).tolist()
+
+    def get_tasks(self, num_tasks: int = -1) -> List[Task]:
+        if num_tasks == -1:
+            num_tasks = len(self.tasks)
+        return self.tasks[:num_tasks].tolist()
