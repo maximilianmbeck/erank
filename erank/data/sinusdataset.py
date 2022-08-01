@@ -7,7 +7,7 @@ from typing import Dict, List, Tuple
 
 from tqdm import tqdm
 from erank.data.basemetadataset import QUERY_X_KEY, QUERY_Y_KEY, SUPPORT_X_KEY, SUPPORT_Y_KEY, BaseMetaDataset, Task
-
+from ml_utilities.torch_utils import to_ndarray
 import matplotlib.pyplot as plt
 
 
@@ -52,9 +52,19 @@ class SinusTask(Task):
     def sinus_func(self, x: torch.Tensor) -> torch.Tensor:
         return self.amplitude * torch.sin(x + self.phase)
 
-    def plot_query_predictions(self, preds_before_learning: torch.Tensor, preds_after_learning: torch.Tensor) -> Figure:
-        # plt.plot(self.query_set[0].numpy(), self.query_set[1].numpy())
-        pass
+    def plot_query_predictions(self, epoch: int, preds_before_learning: torch.Tensor, preds_after_learning: torch.Tensor) -> Tuple[Figure, str]:
+        fig, ax = plt.subplots(1,1)
+        ax.plot(to_ndarray(self.query_set[0]), to_ndarray(self.query_set[1]), color='red', label='Ground truth')
+        # use direct access to _support_data dict to avoid regenerating if `regenerate_support_set` is true
+        ax.plot(to_ndarray(self._support_data[SUPPORT_X_KEY]), to_ndarray(self._support_data[SUPPORT_Y_KEY]), 'o', color='black', label='Support samples')
+        ax.plot(to_ndarray(self.query_set[0]), to_ndarray(preds_before_learning), color='blue', label='preds before inner-loop')
+        ax.plot(to_ndarray(self.query_set[0]), to_ndarray(preds_after_learning), color='orange', label='preds after inner-loop')
+        ax.legend()
+        ax.set_title(f'Predictions - Epoch: {epoch} | Task: {self.name}')
+        ax.set_xlabel('x')
+        ax.set_ylabel('y')
+        fname = f'epoch-{epoch:05d}-querypred-task-{self.name}.png'
+        return fig, fname
 
     @property
     def support_set(self) -> Tuple[torch.Tensor, torch.Tensor]:

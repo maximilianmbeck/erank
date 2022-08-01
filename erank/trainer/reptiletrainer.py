@@ -6,6 +6,9 @@ import wandb
 import torch
 import pandas as pd
 import torchmetrics
+import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
+from pathlib import Path
 from torch import nn
 from tqdm import tqdm
 from omegaconf import DictConfig
@@ -18,14 +21,24 @@ from ml_utilities.torch_utils.factory import create_optimizer_and_scheduler
 LOGGER = logging.getLogger(__name__)
 
 LOG_SEP_SYMBOL = '-'
+SAVEDIR_LOSSES_INNER = 'inner_losses/'
+SAVEDIR_PRED_PLOT = 'pred_plots/'
+SAVEDIR_RESULTS = 'results/'
+SAVEFNAME_RESULTS_EVAL_TABLE = 'epoch-{epoch}-valtasks_results.csv'
+SAVEFNAME_LOSSES_INNER = 'epoch-{epoch}-losses_inner.png'
+DPI = 300
+
+
 class ReptileTrainer(ErankBaseTrainer):
 
     def __init__(self, config: DictConfig):
         super().__init__(config)
         LOGGER.info('Using Reptile Trainer.')
+        # TODO add doc for parameters
         self._task_batch_size = self.config.trainer.batch_size
         self._inner_optimizer = self.config.trainer.inner_optimizer
         self._n_inner_iter = self.config.trainer.n_inner_iter
+        self._val_plots = self.config.trainer.val_plots
 
         self._inner_train_step = 0
 
@@ -98,8 +111,8 @@ class ReptileTrainer(ErankBaseTrainer):
             f'{LOG_SEP_SYMBOL}taskmean').to_dict()
         # prefix 'support{LOG_SEP_SYMBOL}': losses_inner_learning
         losses_inner_learning = self.__process_log_inner_learning(losses_inner_learning)
-        losses_inner_learning = pd.DataFrame(losses_inner_learning).mean().add_prefix(f'support{LOG_SEP_SYMBOL}').add_suffix(
-            f'{LOG_SEP_SYMBOL}taskmean').to_dict()
+        losses_inner_learning = pd.DataFrame(losses_inner_learning).mean().add_prefix(
+            f'support{LOG_SEP_SYMBOL}').add_suffix(f'{LOG_SEP_SYMBOL}taskmean').to_dict()
         losses_epoch = dict(inner_train_step=self._inner_train_step, **losses_inner_eval, **losses_inner_learning)
 
         self._finish_train_epoch(epoch, losses_epoch)
@@ -166,11 +179,12 @@ class ReptileTrainer(ErankBaseTrainer):
     def _val_epoch(self, epoch: int, trained_model: nn.Module) -> float:
         # setup logging
         losses_inner_learning, losses_inner_eval_before, losses_inner_eval_after = {}, {}, {}
+        preds_plot_log, losses_inner_plot_log = {}, {}
 
         # get eval tasks
         eval_tasks = self._datasets['val'].get_tasks()
         pbar = tqdm(eval_tasks, desc=f'Val epoch {epoch}', file=sys.stdout)
-        for task in pbar:
+        for i, task in enumerate(pbar):
             # sample support and query set
             support_set, query_set = task.support_set, task.query_set
 
@@ -190,33 +204,64 @@ class ReptileTrainer(ErankBaseTrainer):
             losses_inner_learning[task.name] = log_losses_inner_learning
             losses_inner_eval_after[task.name] = log_losses_inner_eval_after
 
-            # TODO make plot of predictions
+            # make plot of predictions
+            if i < self._val_plots:
+                fig, fname = task.plot_query_predictions(epoch, predictions_before, predictions_after)
+                # save fig & log to wandb
+                save_path = self._experiment_dir / SAVEDIR_PRED_PLOT
+                save_path.mkdir(parents=True, exist_ok=True)
+                fig.savefig(save_path / fname, bbox_inches='tight', dpi=DPI)
+                preds_plot_log[task.name] = fig
+                plt.close(fig)
 
-        # log epoch
-        # prefix 'query{LOG_SEP_SYMBOL}': losses_inner_eval
+        #! log val epoch
+        # EVAL: prefix 'query{LOG_SEP_SYMBOL}': losses_inner_eval
         losses_eval_before_df = pd.DataFrame(losses_inner_eval_before).transpose().add_suffix(f'{LOG_SEP_SYMBOL}before')
         losses_eval_after_df = pd.DataFrame(losses_inner_eval_after).transpose().add_suffix(f'{LOG_SEP_SYMBOL}after')
         # this is a table containing all tasks as rows and the metrics as columns
-        losses_eval_df = pd.concat([losses_eval_after_df, losses_eval_before_df], axis=1).add_prefix(f'query{LOG_SEP_SYMBOL}')
-        # TODO save df as .csv
-
+        losses_eval_df = pd.concat([losses_eval_after_df, losses_eval_before_df],
+                                   axis=1).add_prefix(f'query{LOG_SEP_SYMBOL}')
+        save_path = self._experiment_dir / SAVEDIR_RESULTS
+        save_path.mkdir(parents=True, exist_ok=True)
+        losses_eval_df.to_csv(save_path / SAVEFNAME_RESULTS_EVAL_TABLE.format(epoch=epoch))
+        # extract global metrics accross all tasks
         losses_eval_taskmean_df = losses_eval_df.mean().add_suffix(f'{LOG_SEP_SYMBOL}taskmean')
         losses_eval_taskmedian_df = losses_eval_df.median().add_suffix(f'{LOG_SEP_SYMBOL}taskmedian')
         log_dict_losses_eval: Dict[str, float] = pd.concat([losses_eval_taskmean_df, losses_eval_taskmedian_df],
                                                            axis=0).to_dict()
 
-        # prefix 'support{LOG_SEP_SYMBOL}': losses_inner_learning
+        # LEARNING: prefix 'support{LOG_SEP_SYMBOL}': losses_inner_learning
         processed_losses_inner_learning = self.__process_log_inner_learning(losses_inner_learning)
-        log_dict_losses_inner_learning: Dict[str, float] = pd.DataFrame(
-            processed_losses_inner_learning).mean().add_prefix(f'support{LOG_SEP_SYMBOL}').add_suffix(f'{LOG_SEP_SYMBOL}taskmean').to_dict()
+        log_dict_losses_inner_learning: Dict[str, float] = pd.DataFrame(processed_losses_inner_learning).mean(
+        ).add_prefix(f'support{LOG_SEP_SYMBOL}').add_suffix(f'{LOG_SEP_SYMBOL}taskmean').to_dict()
 
-        # TODO maybe make plot of losses_inner_learning for each task / a subset of each task # see wandb.plot.line_series()
+        # make plot of losses_inner_learning for each task / a subset of each task
+        fig, fname = self._plot_inner_learning_curves(epoch, losses_inner_learning)
+        save_path = self._experiment_dir / SAVEDIR_LOSSES_INNER
+        save_path.mkdir(parents=True, exist_ok=True)
+        fig.savefig(save_path / fname, bbox_inches='tight', dpi=DPI)
+        losses_inner_plot_log['inner-losses'] = fig
+        plt.close(fig)
 
-        # save the table to disc and to wandb
+        # log to wandb
         losses_epoch = dict(inner_train_step=self._inner_train_step,
                             **log_dict_losses_eval,
                             **log_dict_losses_inner_learning)
         self._log_losses_metrics(prefix='val', epoch=epoch, losses_epoch=losses_epoch)
-        val_score = 0.  # mean across all tasks after finetuning, # TODO make configurable to median
+        self._log_losses_metrics(prefix='preds', epoch=epoch, metrics_epoch=preds_plot_log, log_to_console=False)
+        self._log_losses_metrics(prefix='val-inner', epoch=epoch, metrics_epoch=losses_inner_plot_log, log_to_console=False)
+        val_score = losses_eval_after_df.mean()['loss-after']  # TODO make configurable
         self._reset_metrics()
         return val_score
+
+    def _plot_inner_learning_curves(self, epoch: int,
+                                    losses_inner_learning: Dict[str, Dict[str, List[float]]]) -> Tuple[Figure, str]:
+        fig, ax = plt.subplots(1, 1)
+        # TODO adapt if log_dict contains multiple log losses
+        for task_name, log_dict in losses_inner_learning.items():
+            ax.plot(log_dict['loss'], label=task_name)
+        ax.set_ylabel('inner-loss')
+        ax.set_xlabel('inner-steps')
+        ax.set_title(f'Epoch {epoch}: Loss curves inner-loop')
+        # ax.legend() # wandb displays label, when hovering
+        return fig, SAVEFNAME_LOSSES_INNER.format(epoch=epoch)

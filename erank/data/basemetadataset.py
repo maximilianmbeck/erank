@@ -6,7 +6,9 @@ from matplotlib.figure import Figure
 SUPPORT_X_KEY = QUERY_X_KEY = 'x'
 SUPPORT_Y_KEY = QUERY_Y_KEY = 'y'
 
-def support_query_as_minibatch(set: Tuple[torch.Tensor, torch.Tensor], device: torch.device) -> Tuple[torch.Tensor, torch.Tensor]:
+
+def support_query_as_minibatch(set: Tuple[torch.Tensor, torch.Tensor],
+                               device: torch.device) -> Tuple[torch.Tensor, torch.Tensor]:
     """Checks dimensions of tensors in the set and moves them to the given device.
 
     Args:
@@ -16,10 +18,13 @@ def support_query_as_minibatch(set: Tuple[torch.Tensor, torch.Tensor], device: t
     Returns:
         Tuple[torch.Tensor, torch.Tensor]: set on correct device.
     """
+
     def fun(x):
         assert len(x.shape) > 1, 'Tensor as too less dimensions. Maybe batch dimension missing?'
         return x.to(device)
+
     return tuple(map(fun, set))
+
 
 class Task(ABC):
 
@@ -49,7 +54,8 @@ class Task(ABC):
     def name(self) -> str:
         pass
 
-    def plot_query_predictions(self, preds_before_learning: torch.Tensor, preds_after_learning: torch.Tensor) -> Figure:
+    def plot_query_predictions(self, epoch: int, preds_before_learning: torch.Tensor,
+                               preds_after_learning: torch.Tensor) -> Tuple[Figure, str]:
         """Make a figure comparing the predictions on the query set before and after learning on the support set.
 
         Args:
@@ -57,7 +63,7 @@ class Task(ABC):
             preds_after_learning (torch.Tensor): Predictions after fine-tuning to this task.
 
         Returns:
-            Figure: The matplotlib Figure.
+            Tuple[Figure, str]: The matplotlib Figure and its filename.
         """
         return None
 
@@ -114,6 +120,6 @@ class BaseMetaDataset(ABC):
             Task: The task.
         """
         pass
-        
+
     def __len__(self) -> int:
         self.num_tasks

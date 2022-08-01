@@ -16,6 +16,7 @@ from erank.regularization import EffectiveRankRegularization
 
 LOGGER = logging.getLogger(__name__)
 
+
 class ErankBaseTrainer(BaseTrainer):
     """Abstract trainer for this project. Collects all common functionalitites across trainers.
 
@@ -110,8 +111,12 @@ class ErankBaseTrainer(BaseTrainer):
         self._reset_metrics()
         return val_score
 
-    def _log_losses_metrics(self, prefix: str, epoch: int, losses_epoch: Dict[str, Union[List[float], float]] = {},
-                          metrics_epoch: Dict[str, Union[float, torch.Tensor]] = {}) -> None:
+    def _log_losses_metrics(self,
+                            prefix: str,
+                            epoch: int,
+                            losses_epoch: Dict[str, Union[List[float], float]] = {},
+                            metrics_epoch: Dict[str, Any] = {},
+                            log_to_console: bool = True) -> None:
         for loss_name, loss_vals in losses_epoch.items():
             if isinstance(loss_vals, list):
                 losses_epoch[loss_name] = torch.tensor(loss_vals).mean().item()
@@ -119,9 +124,8 @@ class ErankBaseTrainer(BaseTrainer):
         # log epoch
         log_dict = {'epoch': epoch, 'train_step': self._train_step, **losses_epoch, **metrics_epoch}
         wandb.log({f'{prefix}/': log_dict})
-
-        LOGGER.info(f'{prefix} epoch \n{pd.Series(convert_dict_to_python_types(log_dict), dtype=float)}')
-
+        if log_to_console:
+            LOGGER.info(f'{prefix} epoch \n{pd.Series(convert_dict_to_python_types(log_dict), dtype=float)}')
 
     def _final_hook(self, final_results: Dict[str, Any], *args, **kwargs):
         wandb.run.summary.update(final_results)
