@@ -102,6 +102,18 @@ class BaseMetaDataset(ABC):
             List[Task]: The selected tasks.
         """
         pass
+
+    @abstractmethod
+    def get_task(self, task_name: str) -> Task:
+        """Get a task by name. `name` is defined by the property `name` of the `Task` class.
+
+        Args:
+            task_name (str): The task name.
+
+        Returns:
+            Task: The task.
+        """
+        pass
         
     def __len__(self) -> int:
         self.num_tasks

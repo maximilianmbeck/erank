@@ -3,7 +3,7 @@ from matplotlib.figure import Figure
 import torch
 import copy
 import numpy as np
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 from tqdm import tqdm
 from erank.data.basemetadataset import QUERY_X_KEY, QUERY_Y_KEY, SUPPORT_X_KEY, SUPPORT_Y_KEY, BaseMetaDataset, Task
@@ -30,7 +30,7 @@ class SinusTask(Task):
 
         self._generate_support_set()
         self._generate_query_set()
-    
+
     @property
     def name(self) -> str:
         return f'Ampl_{self.amplitude:2.4f}-Phase_{self.phase:2.4f}'
@@ -80,20 +80,25 @@ class SinusDataset(BaseMetaDataset):
         self.x_range = x_range
         self.regenerate_task_support_set = regenerate_task_support_set
         # generate all tasks an hold them in memory
-        self.tasks = np.array(self._generate_tasks())
+        self.tasks : np.ndarray = None
+        self.task_name_to_index : Dict[str, int] = None
+        self.tasks, self.task_name_to_index = self._generate_tasks()
 
-    def _generate_tasks(self) -> List[SinusTask]:
-        # we need deepcopy to "deepcopy" the internal dictionaries of the tasks
-        return [
-            copy.deepcopy(
+    def _generate_tasks(self) -> Tuple[np.ndarray, Dict[str, int]]:
+        tasks = []
+        name_to_index = {}
+        for i in tqdm(range(self.num_tasks), file=sys.stdout, desc='Generating Sinus tasks'):
+            # we need deepcopy to "deepcopy" the internal dictionaries of the tasks
+            task = copy.deepcopy(
                 SinusTask(self.support_size,
                           self.query_size,
                           self.amplitudes[i],
                           self.phases[i],
                           self.x_range,
                           regenerate_support_set=self.regenerate_task_support_set))
-            for i in tqdm(range(self.num_tasks), file=sys.stdout, desc='Generating Sinus tasks')
-        ]
+            tasks.append(task)
+            name_to_index[task.name] = i
+        return np.array(tasks), name_to_index
 
     def sample_tasks(self, num_tasks: int) -> List[SinusTask]:
         # task_idxes = np.random.default_rng().integers(len(self.tasks), size=num_tasks)
@@ -105,3 +110,6 @@ class SinusDataset(BaseMetaDataset):
         if num_tasks == -1:
             num_tasks = len(self.tasks)
         return self.tasks[:num_tasks].tolist()
+
+    def get_task(self, task_name: str) -> Task:
+        return self.tasks[self.task_name_to_index[task_name]]
