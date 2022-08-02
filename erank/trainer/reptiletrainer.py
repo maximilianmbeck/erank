@@ -107,7 +107,7 @@ class ReptileTrainer(ErankBaseTrainer):
 
         # log epoch
         # prefix 'query{LOG_SEP_SYMBOL}': losses_inner_eval
-        losses_inner_eval = pd.DataFrame(losses_inner_eval).mean().add_prefix(f'query{LOG_SEP_SYMBOL}').add_suffix(
+        losses_inner_eval = pd.DataFrame(losses_inner_eval).transpose().mean().add_prefix(f'query{LOG_SEP_SYMBOL}').add_suffix(
             f'{LOG_SEP_SYMBOL}taskmean').to_dict()
         # prefix 'support{LOG_SEP_SYMBOL}': losses_inner_learning
         losses_inner_learning = self.__process_log_inner_learning(losses_inner_learning)
