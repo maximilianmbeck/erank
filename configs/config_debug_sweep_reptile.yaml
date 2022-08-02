@@ -6,7 +6,7 @@ defaults:
 run_config: 
   exec_type: parallel # sequential
   hostname: dragonfly
-  gpu_ids: [0,1]
+  gpu_ids: [0]
   runs_per_gpu: 5
   
   wandb: # wandb config for run_handler, if "wandb: null" then logging to wandb is disabled for run_handler
@@ -27,14 +27,14 @@ sweep:
     - parameter: trainer.batch_size
       vals: [1,5,10]
     - parameter: trainer.n_inner_iter
-      vals: [3,5,10]
+      vals: [3] #[3,5,10]
 
 ### 
 config:
   experiment_data:
     entity: jkuiml-fsl # null
     project_name: erank_meta
-    experiment_tag: '6.0'
+    experiment_tag: 'DEBUG'
     experiment_name: sinus-${config.experiment_data.experiment_tag}-reptile_initial_exps-batch_size_${config.trainer.batch_size}-n_inner_iter_${config.trainer.n_inner_iter}
     experiment_dir: null
     seed: 0
