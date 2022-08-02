@@ -268,7 +268,7 @@ class ReptileTrainer(ErankBaseTrainer):
 
         # make plot of losses_inner_learning for each task / a subset of each task
         losses_inner_plot_log = {}
-        fig, fname = self._plot_inner_learning_curves(epoch, losses_inner_learning)
+        fig, fname = self.__plot_inner_learning_curves(epoch, losses_inner_learning)
         save_path = self._experiment_dir / SAVEDIR_LOSSES_INNER
         save_path.mkdir(parents=True, exist_ok=True)
         fig.savefig(save_path / fname, bbox_inches='tight', dpi=DPI)
