@@ -71,8 +71,8 @@ class ReptileTrainer(ErankBaseTrainer):
 
         # parallel version of Reptile (iterate over a batch of tasks)
         task_batch = self._datasets['train'].sample_tasks(self._task_batch_size)
-        pbar = tqdm(task_batch, desc=f'Train epoch {epoch}', file=sys.stdout)
-        for task in pbar:
+        # pbar = tqdm(task_batch, desc=f'Train epoch {epoch}', file=sys.stdout) # don't use tqdm for performance reasons
+        for task in task_batch:
             # sample support and query set
             support_set, query_set = task.support_set, task.query_set
 

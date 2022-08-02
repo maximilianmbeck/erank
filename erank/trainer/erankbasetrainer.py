@@ -97,8 +97,10 @@ class ErankBaseTrainer(BaseTrainer):
                             epoch: int,
                             losses_epoch: Dict[str, Union[List[float], float]] = {},
                             metrics_epoch: Dict[str, Union[float, torch.Tensor]] = {}) -> None:
-        self._log_losses_metrics('train', epoch, losses_epoch, metrics_epoch)
-        self._reset_metrics()
+        log_train_epoch_every = self.config.trainer.get('log_train_epoch_every', 1)
+        if log_train_epoch_every > 0 and epoch % log_train_epoch_every == 0:
+            self._log_losses_metrics('train', epoch, losses_epoch, metrics_epoch)
+            self._reset_metrics()
 
     def _finish_val_epoch(self,
                           epoch: int,

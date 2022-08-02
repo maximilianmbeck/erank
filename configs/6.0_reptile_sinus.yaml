@@ -69,6 +69,7 @@ config:
   trainer:
     training_setup: reptile
     n_epochs: 100000 # number of iterations (outer/meta gradient steps)
+    log_train_epoch_every: 100
     val_every: 1000
     save_every: 10000
     early_stopping_patience: null # no early stopping
