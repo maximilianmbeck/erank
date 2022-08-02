@@ -13,5 +13,33 @@
     "python.formatting.yapfArgs": [
         "--style",
         "{based_on_style: google, column_limit: 120, indent_width: 4}"
-    ]
+    ], 
+    "sync-rsync.sites": [
+        {
+            "localPath": "${workspaceFolder}",
+            "remotePath": "dragonfly:/system/user/beck/pwbeck/projects/regularization/erank",
+            "exclude": [
+                ".vscode/settings.json",
+                "__pycache__",
+                ".ipynb_checkpoints", 
+                "outputs/**",
+                "tmp/**"
+            ],
+            "deleteFiles": true, 
+            "upOnly": true
+        }, 
+        {
+            "localPath": "${workspaceFolder}/../ml_utilities",
+            "remotePath": "dragonfly:/system/user/beck/pwbeck/projects/regularization/ml_utilities",
+            "exclude": [
+                ".vscode/settings.json",
+                "__pycache__",
+                ".ipynb_checkpoints", 
+                "outputs/**", 
+                "tmp/**"
+            ], 
+            "deleteFiles": true, 
+            "upOnly": true
+        }
+    ],
 }
