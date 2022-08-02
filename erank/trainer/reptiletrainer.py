@@ -212,7 +212,7 @@ class ReptileTrainer(ErankBaseTrainer):
                 save_path.mkdir(parents=True, exist_ok=True)
                 fig.savefig(save_path / fname, bbox_inches='tight', dpi=DPI)
                 preds_plot_log[task.name] = fig
-                plt.close(fig)
+                # plt.close(fig)
 
         #! log val epoch
         # EVAL: prefix 'query{LOG_SEP_SYMBOL}': losses_inner_eval
@@ -241,7 +241,7 @@ class ReptileTrainer(ErankBaseTrainer):
         save_path.mkdir(parents=True, exist_ok=True)
         fig.savefig(save_path / fname, bbox_inches='tight', dpi=DPI)
         losses_inner_plot_log['inner-losses'] = fig
-        plt.close(fig)
+        # plt.close(fig)
 
         # log to wandb
         losses_epoch = dict(inner_train_step=self._inner_train_step,
