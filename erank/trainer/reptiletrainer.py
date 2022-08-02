@@ -106,33 +106,7 @@ class ReptileTrainer(ErankBaseTrainer):
         self._train_step += 1
 
         # log epoch
-        # prefix 'query{LOG_SEP_SYMBOL}': losses_inner_eval
-        losses_inner_eval = pd.DataFrame(losses_inner_eval).transpose().mean().add_prefix(f'query{LOG_SEP_SYMBOL}').add_suffix(
-            f'{LOG_SEP_SYMBOL}taskmean').to_dict()
-        # prefix 'support{LOG_SEP_SYMBOL}': losses_inner_learning
-        losses_inner_learning = self.__process_log_inner_learning(losses_inner_learning)
-        losses_inner_learning = pd.DataFrame(losses_inner_learning).mean().add_prefix(
-            f'support{LOG_SEP_SYMBOL}').add_suffix(f'{LOG_SEP_SYMBOL}taskmean').to_dict()
-        losses_epoch = dict(inner_train_step=self._inner_train_step, **losses_inner_eval, **losses_inner_learning)
-
-        self._finish_train_epoch(epoch, losses_epoch)
-
-    def __process_log_inner_learning(
-            self, log_dicts_losses_inner_learning: Dict[str, Dict[str, List[float]]]) -> List[Dict[str, float]]:
-        """We get a log_dict for every task (outer Dict[task.name, log_dict]). Each log_dict contains all losses and metrics as keys and a list of values corresponding to each 
-        inner update step. 
-        This method extracts meaningful information from these data that can be logged to a wandb panel.
-        For now, for example: the metrics mean accross all inner step and the metrics after the last inner step."""
-        list_log_dict = []
-        for task_name, task_log_dict in log_dicts_losses_inner_learning.items():
-            log_dict = {}
-            for k, loss_list in task_log_dict.items():
-                # extract mean loss accross steps
-                log_dict[f'{k}_stepmean'] = torch.tensor(loss_list).mean().item()
-                # extract loss last step
-                log_dict[f'{k}_steplast'] = loss_list[-1]
-            list_log_dict.append(log_dict)
-        return list_log_dict
+        self.__log_train_epoch(epoch, losses_inner_learning, losses_inner_eval)
 
     def _inner_loop_learning(
             self, inner_model: nn.Module, support_set: Tuple[torch.Tensor,
@@ -179,7 +153,7 @@ class ReptileTrainer(ErankBaseTrainer):
     def _val_epoch(self, epoch: int, trained_model: nn.Module) -> float:
         # setup logging
         losses_inner_learning, losses_inner_eval_before, losses_inner_eval_after = {}, {}, {}
-        preds_plot_log, losses_inner_plot_log = {}, {}
+        preds_plot_log = {}
 
         # get eval tasks
         eval_tasks = self._datasets['val'].get_tasks()
@@ -215,6 +189,63 @@ class ReptileTrainer(ErankBaseTrainer):
                 # plt.close(fig)
 
         #! log val epoch
+        return self.__log_val_epoch(epoch, losses_inner_learning, losses_inner_eval_before, losses_inner_eval_after,
+                                    preds_plot_log)
+
+    #### 
+
+    def __log_train_epoch(self, epoch: int, losses_inner_learning: Dict[str, Dict[str, List[float]]],
+                          losses_inner_eval: Dict[str, Dict[str, float]]) -> None:
+        """Log results of a training iteration (epoch):
+
+        Args:
+            epoch (int): epoch
+            losses_inner_learning (Dict[str, Dict[str, List[float]]]): Dict levels: Task->metric/loss->Values at inner steps
+            losses_inner_eval (Dict[str, Dict[str, float]]): Dict levels: Task->metric/loss->Value
+        """
+        # prefix 'query{LOG_SEP_SYMBOL}': losses_inner_eval
+        losses_inner_eval = pd.DataFrame(losses_inner_eval).transpose().mean().add_prefix(
+            f'query{LOG_SEP_SYMBOL}').add_suffix(f'{LOG_SEP_SYMBOL}taskmean').to_dict()
+        # prefix 'support{LOG_SEP_SYMBOL}': losses_inner_learning
+        losses_inner_learning = self.__process_log_inner_learning(losses_inner_learning)
+        losses_inner_learning = pd.DataFrame(losses_inner_learning).mean().add_prefix(
+            f'support{LOG_SEP_SYMBOL}').add_suffix(f'{LOG_SEP_SYMBOL}taskmean').to_dict()
+        losses_epoch = dict(inner_train_step=self._inner_train_step, **losses_inner_eval, **losses_inner_learning)
+        self._finish_train_epoch(epoch, losses_epoch)
+
+    def __process_log_inner_learning(
+            self, log_dicts_losses_inner_learning: Dict[str, Dict[str, List[float]]]) -> List[Dict[str, float]]:
+        """We get a log_dict for every task (outer Dict[task.name, log_dict]). Each log_dict contains all losses and metrics as keys and a list of values corresponding to each 
+        inner update step. 
+        This method extracts meaningful information from these data that can be logged to a wandb panel.
+        For now, for example: the metrics mean accross all inner step and the metrics after the last inner step."""
+        list_log_dict = []
+        for task_name, task_log_dict in log_dicts_losses_inner_learning.items():
+            log_dict = {}
+            for k, loss_list in task_log_dict.items():
+                # extract mean loss accross steps
+                log_dict[f'{k}_stepmean'] = torch.tensor(loss_list).mean().item()
+                # extract loss last step
+                log_dict[f'{k}_steplast'] = loss_list[-1]
+            list_log_dict.append(log_dict)
+        return list_log_dict
+
+    def __log_val_epoch(self, epoch: int, losses_inner_learning: Dict[str, Dict[str, List[float]]],
+                        losses_inner_eval_before: Dict[str, Dict[str, float]],
+                        losses_inner_eval_after: Dict[str, Dict[str, float]], preds_plot_log: Dict[str,
+                                                                                                   Figure]) -> float:
+        """Log results of a validation iteration (epoch).
+
+        Args:
+            epoch (int): epoch
+            losses_inner_learning (Dict[str, Dict[str, List[float]]]): Dict levels: Task->metric/loss->Values at inner steps
+            losses_inner_eval_before (Dict[str, Dict[str, float]]): Dict levels: Task->metric/loss->Value
+            losses_inner_eval_after (Dict[str, Dict[str, float]]): Dict levels: Task->metric/loss->Value
+            preds_plot_log (Dict[str, Figure]): Dict levels: Task->Plot
+
+        Returns:
+            float: The validation score used for early stopping.
+        """
         # EVAL: prefix 'query{LOG_SEP_SYMBOL}': losses_inner_eval
         losses_eval_before_df = pd.DataFrame(losses_inner_eval_before).transpose().add_suffix(f'{LOG_SEP_SYMBOL}before')
         losses_eval_after_df = pd.DataFrame(losses_inner_eval_after).transpose().add_suffix(f'{LOG_SEP_SYMBOL}after')
@@ -236,6 +267,7 @@ class ReptileTrainer(ErankBaseTrainer):
         ).add_prefix(f'support{LOG_SEP_SYMBOL}').add_suffix(f'{LOG_SEP_SYMBOL}taskmean').to_dict()
 
         # make plot of losses_inner_learning for each task / a subset of each task
+        losses_inner_plot_log = {}
         fig, fname = self._plot_inner_learning_curves(epoch, losses_inner_learning)
         save_path = self._experiment_dir / SAVEDIR_LOSSES_INNER
         save_path.mkdir(parents=True, exist_ok=True)
@@ -249,12 +281,15 @@ class ReptileTrainer(ErankBaseTrainer):
                             **log_dict_losses_inner_learning)
         self._log_losses_metrics(prefix='val', epoch=epoch, losses_epoch=losses_epoch)
         self._log_losses_metrics(prefix='preds', epoch=epoch, metrics_epoch=preds_plot_log, log_to_console=False)
-        self._log_losses_metrics(prefix='val-inner', epoch=epoch, metrics_epoch=losses_inner_plot_log, log_to_console=False)
+        self._log_losses_metrics(prefix='val-inner',
+                                 epoch=epoch,
+                                 metrics_epoch=losses_inner_plot_log,
+                                 log_to_console=False)
         val_score = losses_eval_after_df.mean()['loss-after']  # TODO make configurable
         self._reset_metrics()
         return val_score
 
-    def _plot_inner_learning_curves(self, epoch: int,
+    def __plot_inner_learning_curves(self, epoch: int,
                                     losses_inner_learning: Dict[str, Dict[str, List[float]]]) -> Tuple[Figure, str]:
         fig, ax = plt.subplots(1, 1)
         # TODO adapt if log_dict contains multiple log losses
