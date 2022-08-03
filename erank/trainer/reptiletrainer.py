@@ -2,16 +2,14 @@ import logging
 import sys
 import copy
 from typing import Dict, Tuple, List
-import wandb
 import torch
 import pandas as pd
 import torchmetrics
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
-from pathlib import Path
 from torch import nn
 from tqdm import tqdm
-from omegaconf import DictConfig
+from omegaconf import DictConfig, ListConfig
 from erank.data import get_metadataset_class
 from erank.data.basemetadataset import support_query_as_minibatch
 from erank.trainer.erankbasetrainer import ErankBaseTrainer
@@ -40,12 +38,12 @@ class ReptileTrainer(ErankBaseTrainer):
         self._n_inner_iter = self.config.trainer.n_inner_iter
         self._val_pred_plots_for_tasks = self.config.trainer.val_pred_plots_for_tasks
 
-        self._inner_eval_after_steps = self.config.trainer.inner_eval_after_steps
+        self._inner_eval_after_steps = self.config.trainer.get('inner_eval_after_steps', None)
         if self._inner_eval_after_steps is None:
             # use a default list
             self._inner_eval_after_steps = [0, 1, 2, 3, 5, 10, 20, 30, 50]
         else:
-            if not isinstance(self._inner_eval_after_steps, list):
+            if not isinstance(self._inner_eval_after_steps, (list, ListConfig)):
                 self._inner_eval_after_steps = [self._inner_eval_after_steps]
             # make sure to always evaluate the meta/base model before finetuning
             if not 0 in self._inner_eval_after_steps:
