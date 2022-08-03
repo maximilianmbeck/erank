@@ -35,10 +35,21 @@ class ReptileTrainer(ErankBaseTrainer):
         super().__init__(config)
         LOGGER.info('Using Reptile Trainer.')
         # TODO add doc for parameters
-        self._task_batch_size = self.config.trainer.batch_size
+        self._task_batch_size = self.config.trainer.task_batch_size
         self._inner_optimizer = self.config.trainer.inner_optimizer
         self._n_inner_iter = self.config.trainer.n_inner_iter
-        self._val_plots = self.config.trainer.val_plots
+        self._val_pred_plots_for_tasks = self.config.trainer.val_pred_plots_for_tasks
+
+        self._inner_eval_after_steps = self.config.trainer.inner_eval_after_steps
+        if self._inner_eval_after_steps is None:
+            # use a default list
+            self._inner_eval_after_steps = [0, 1, 2, 3, 5, 10, 20, 30, 50]
+        else:
+            if not isinstance(self._inner_eval_after_steps, list):
+                self._inner_eval_after_steps = [self._inner_eval_after_steps]
+            # make sure to always evaluate the meta/base model before finetuning
+            if not 0 in self._inner_eval_after_steps:
+                self._inner_eval_after_steps.append(0)
 
         self._inner_train_step = 0
 
@@ -78,7 +89,8 @@ class ReptileTrainer(ErankBaseTrainer):
 
             # copy model parameters and do inner-loop learning
             inner_model = copy.deepcopy(self._model)
-            inner_model, log_losses_inner_learning = self._inner_loop_learning(inner_model, support_set)
+            inner_model, log_losses_inner_learning, _, _ = self._inner_loop_learning(
+                inner_model, support_set, eval_after_steps=[])  # no evaluation during inner-loop training
 
             # eval on query set with inner-loop optimized model
             log_losses_inner_eval, query_preds = self._inner_loop_eval(inner_model, query_set)
@@ -109,14 +121,45 @@ class ReptileTrainer(ErankBaseTrainer):
         self.__log_train_epoch(epoch, losses_inner_learning, losses_inner_eval)
 
     def _inner_loop_learning(
-            self, inner_model: nn.Module, support_set: Tuple[torch.Tensor,
-                                                             torch.Tensor]) -> Tuple[nn.Module, Dict[str, List[float]]]:
-        # log dict
+        self,
+        inner_model: nn.Module,
+        support_set: Tuple[torch.Tensor, torch.Tensor],
+        query_set: Tuple[torch.Tensor, torch.Tensor] = None,
+        eval_after_steps: List[int] = [0, 1, 2, 3, 5, 10, 20, 30, 50]
+    ) -> Tuple[nn.Module, Dict[str, List[float]], Dict[int, Dict[str, float]], Dict[int, torch.Tensor]]:
+        """Inner learning loop. Training on `support_set` and evaluation on `query_set`. 
+        Evaluation is performed after every step in `eval_after_steps`.
+
+        Args:
+            inner_model (nn.Module): The base/meta model to finetune.
+            support_set (Tuple[torch.Tensor, torch.Tensor]): The training set.
+            query_set (Tuple[torch.Tensor, torch.Tensor]): The validation/test set.
+            eval_after_steps (List[int]): Does evaluation after steps in this list.
+
+        Returns:
+            Tuple[nn.Module, Dict[str, List[float]], Dict[int, Dict[str, float]], Dict[int, torch.Tensor]]: 
+                - finetuned model
+                - inner training losses
+                - inner evaluation losses and metrics
+                - inner evaluation predictions
+        """
+        def do_eval_after_step(step: int):
+            if i in eval_after_steps:
+                losses, preds = self._inner_loop_eval(inner_model, query_set)
+                losses_inner_eval[i] = losses
+                inner_eval_preds[i] = preds
+
+        # log dicts
         losses_inner = dict(loss=[])
+        losses_inner_eval, inner_eval_preds = {}, {}
 
         inner_model.train(True)
         inner_optimizer, _ = create_optimizer_and_scheduler(inner_model.parameters(), **self._inner_optimizer)
         inner_optimizer.zero_grad()
+        # eval before fine-tuning
+        i = 0
+        do_eval_after_step(i)
+
         # do inner-loop optimization
         for i in range(self._n_inner_iter):
             xs, ys = support_query_as_minibatch(support_set, self.device)
@@ -131,10 +174,17 @@ class ReptileTrainer(ErankBaseTrainer):
             inner_optimizer.step()
             self._inner_train_step += 1
 
+            # eval during fine-tuning
+            do_eval_after_step(i)
+
             # metrics & logging
             losses_inner['loss'].append(loss.item())
+        
+        # eval after fine-tuning
+        i += 1
+        do_eval_after_step(i)
 
-        return inner_model, losses_inner
+        return inner_model, losses_inner, losses_inner_eval, inner_eval_preds
 
     def _inner_loop_eval(self, inner_model: nn.Module,
                          query_set: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[Dict[str, float], torch.Tensor]:
@@ -148,11 +198,11 @@ class ReptileTrainer(ErankBaseTrainer):
         metric_vals = self._train_metrics(yq_pred, yq)
         # put train metrics into log dict
         losses_inner_eval.update(convert_dict_to_python_types(metric_vals))
-        return losses_inner_eval, yq_pred.detach()
+        return losses_inner_eval, yq_pred.detach().cpu()
 
     def _val_epoch(self, epoch: int, trained_model: nn.Module) -> float:
         # setup logging
-        losses_inner_learning, losses_inner_eval_before, losses_inner_eval_after = {}, {}, {}
+        losses_inner_learning, losses_inner_eval = {}, {}
         preds_plot_log = {}
 
         # get eval tasks
@@ -164,23 +214,18 @@ class ReptileTrainer(ErankBaseTrainer):
 
             # copy model parameters and do inner-loop learning
             inner_model = copy.deepcopy(trained_model)
-            # eval on query set before inner-loop optimization
-            log_losses_inner_eval_before, predictions_before = self._inner_loop_eval(inner_model, query_set)
 
-            # fine-tune model for `n_inner_iter steps`
-            inner_model, log_losses_inner_learning = self._inner_loop_learning(inner_model, support_set)
-
-            # eval on query set with inner-loop optimized model
-            log_losses_inner_eval_after, predictions_after = self._inner_loop_eval(inner_model, query_set)
+            # fine-tune model for `n_inner_iter steps` and evaluate during finetuning after some gradient steps
+            inner_model, log_losses_inner_learning, log_losses_inner_eval, eval_predictions = self._inner_loop_learning(
+                inner_model, support_set, query_set, eval_after_steps=self._inner_eval_after_steps)
 
             # track all logs
-            losses_inner_eval_before[task.name] = log_losses_inner_eval_before
+            losses_inner_eval[task.name] = log_losses_inner_eval
             losses_inner_learning[task.name] = log_losses_inner_learning
-            losses_inner_eval_after[task.name] = log_losses_inner_eval_after
 
             # make plot of predictions
-            if i < self._val_plots:
-                fig, fname = task.plot_query_predictions(epoch, predictions_before, predictions_after)
+            if i < self._val_pred_plots_for_tasks:
+                fig, fname = task.plot_query_predictions(epoch, eval_predictions)
                 # save fig & log to wandb
                 save_path = self._experiment_dir / SAVEDIR_PRED_PLOT
                 save_path.mkdir(parents=True, exist_ok=True)
@@ -189,10 +234,9 @@ class ReptileTrainer(ErankBaseTrainer):
                 # plt.close(fig)
 
         #! log val epoch
-        return self.__log_val_epoch(epoch, losses_inner_learning, losses_inner_eval_before, losses_inner_eval_after,
-                                    preds_plot_log)
+        return self.__log_val_epoch(epoch, losses_inner_learning, losses_inner_eval, preds_plot_log)
 
-    #### 
+    ####
 
     def __log_train_epoch(self, epoch: int, losses_inner_learning: Dict[str, Dict[str, List[float]]],
                           losses_inner_eval: Dict[str, Dict[str, float]]) -> None:
@@ -231,21 +275,26 @@ class ReptileTrainer(ErankBaseTrainer):
         return list_log_dict
 
     def __log_val_epoch(self, epoch: int, losses_inner_learning: Dict[str, Dict[str, List[float]]],
-                        losses_inner_eval_before: Dict[str, Dict[str, float]],
-                        losses_inner_eval_after: Dict[str, Dict[str, float]], preds_plot_log: Dict[str,
-                                                                                                   Figure]) -> float:
+                        losses_inner_eval: Dict[int, Dict[str, Dict[str, float]]],
+                        preds_plot_log: Dict[str, Figure]) -> float:
         """Log results of a validation iteration (epoch).
 
         Args:
             epoch (int): epoch
             losses_inner_learning (Dict[str, Dict[str, List[float]]]): Dict levels: Task->metric/loss->Values at inner steps
-            losses_inner_eval_before (Dict[str, Dict[str, float]]): Dict levels: Task->metric/loss->Value
-            losses_inner_eval_after (Dict[str, Dict[str, float]]): Dict levels: Task->metric/loss->Value
+            losses_inner_eval (Dict[int, Dict[str, Dict[str, float]]]): Dict levels: inner_steps->Task->metric/loss->Value
             preds_plot_log (Dict[str, Figure]): Dict levels: Task->Plot
 
         Returns:
             float: The validation score used for early stopping.
         """
+        # extract eval results before and after fine-tuning for each task
+        losses_inner_eval_before = dict()
+        losses_inner_eval_after = dict()
+        for task_name, task_log in losses_inner_eval.items():
+            losses_inner_eval_before[task_name] = task_log[0]  # after 0 steps
+            losses_inner_eval_after[task_name] = task_log[self._n_inner_iter]  
+
         # EVAL: prefix 'query{LOG_SEP_SYMBOL}': losses_inner_eval
         losses_eval_before_df = pd.DataFrame(losses_inner_eval_before).transpose().add_suffix(f'{LOG_SEP_SYMBOL}before')
         losses_eval_after_df = pd.DataFrame(losses_inner_eval_after).transpose().add_suffix(f'{LOG_SEP_SYMBOL}after')
@@ -290,7 +339,7 @@ class ReptileTrainer(ErankBaseTrainer):
         return val_score
 
     def __plot_inner_learning_curves(self, epoch: int,
-                                    losses_inner_learning: Dict[str, Dict[str, List[float]]]) -> Tuple[Figure, str]:
+                                     losses_inner_learning: Dict[str, Dict[str, List[float]]]) -> Tuple[Figure, str]:
         fig, ax = plt.subplots(1, 1)
         # TODO adapt if log_dict contains multiple log losses
         for task_name, log_dict in losses_inner_learning.items():

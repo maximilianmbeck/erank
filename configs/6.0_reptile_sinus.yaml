@@ -37,7 +37,7 @@ config:
     entity: jkuiml-fsl # null
     project_name: erank_meta
     experiment_tag: "6.0"
-    experiment_name: sinus-${config.experiment_data.experiment_tag}.${start_num}-reptile_initial_exps-batch_size_${config.trainer.batch_size}-n_inner_iter_${config.trainer.n_inner_iter}
+    experiment_name: sinus-${config.experiment_data.experiment_tag}.${start_num}-reptile_initial_exps-batch_size_${config.trainer.task_batch_size}-n_inner_iter_${config.trainer.n_inner_iter}
     experiment_dir: null
     seed: 0
     hostname: null # the server on which the run is run, will be filled by run_handler
@@ -75,7 +75,7 @@ config:
     val_every: 1000
     save_every: 10000
     early_stopping_patience: null # no early stopping
-    batch_size: XXX #1 #5 # meta-batch size (number of tasks sampled per iteration)
+    task_batch_size: XXX #1 #5 # meta-batch size (number of tasks sampled per iteration)
     optimizer_scheduler:
       optimizer_name: sgd #adamw # TODO implement optimizer state sharing between inner loops
       optimizer_kwargs:
@@ -87,7 +87,8 @@ config:
       optimizer_kwargs:
         lr: 0.01
     n_inner_iter: XXX #3
-    val_plots: 1 # Prediction plots for `val_plots` tasks. If int: Uses the first `val_plots` tasks to generate plots
+    val_pred_plots_for_tasks: 1 # Prediction plots for `val_plots` tasks. If int: Uses the first `val_plots` tasks to generate plots
+    inner_eval_after_steps: null # null: use default, List[int]: list of steps after, which eval is done
 
     loss: mse
     # erank:

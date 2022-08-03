@@ -52,13 +52,13 @@ class SinusTask(Task):
     def sinus_func(self, x: torch.Tensor) -> torch.Tensor:
         return self.amplitude * torch.sin(x + self.phase)
 
-    def plot_query_predictions(self, epoch: int, preds_before_learning: torch.Tensor, preds_after_learning: torch.Tensor) -> Tuple[Figure, str]:
+    def plot_query_predictions(self, epoch: int, preds: Dict[int, torch.Tensor]) -> Tuple[Figure, str]:
         fig, ax = plt.subplots(1,1)
         ax.plot(to_ndarray(self.query_set[0]), to_ndarray(self.query_set[1]), color='red', label='Ground truth')
         # use direct access to _support_data dict to avoid regenerating if `regenerate_support_set` is true
         ax.plot(to_ndarray(self._support_data[SUPPORT_X_KEY]), to_ndarray(self._support_data[SUPPORT_Y_KEY]), 'o', color='black', label='Support samples')
-        ax.plot(to_ndarray(self.query_set[0]), to_ndarray(preds_before_learning), color='blue', label='preds before inner-loop')
-        ax.plot(to_ndarray(self.query_set[0]), to_ndarray(preds_after_learning), color='orange', label='preds after inner-loop')
+        for step, pred in preds.items():
+            ax.plot(to_ndarray(self.query_set[0]), to_ndarray(pred), label=f'preds after {step} steps')
         ax.legend()
         ax.set_title(f'Predictions - Epoch: {epoch} | Task: {self.name}')
         ax.set_xlabel('x')

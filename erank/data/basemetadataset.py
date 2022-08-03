@@ -54,13 +54,13 @@ class Task(ABC):
     def name(self) -> str:
         pass
 
-    def plot_query_predictions(self, epoch: int, preds_before_learning: torch.Tensor,
-                               preds_after_learning: torch.Tensor) -> Tuple[Figure, str]:
+    def plot_query_predictions(self, epoch: int, preds: Dict[int, torch.Tensor]) -> Tuple[Figure, str]:
         """Make a figure comparing the predictions on the query set before and after learning on the support set.
 
         Args:
-            preds_before_learning (torch.Tensor): Predictions of the meta-model before fine-tuning to the task, using the support set.
-            preds_after_learning (torch.Tensor): Predictions after fine-tuning to this task.
+            epoch (int): The current learning epoch. 
+            preds (Dict[int, torch.Tensor]): Predictions on query set of the model after n (the key) 
+                steps of finetuning on the support set.
 
         Returns:
             Tuple[Figure, str]: The matplotlib Figure and its filename.
