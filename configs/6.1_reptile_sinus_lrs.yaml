@@ -77,7 +77,7 @@ config:
     n_epochs: 200000 # number of iterations (outer/meta gradient steps)
     log_train_epoch_every: 2000
     val_every: 5000
-    save_every: 10000
+    save_every: 100000
     early_stopping_patience: null # no early stopping
     task_batch_size: XXX #1 #5 # meta-batch size (number of tasks sampled per iteration)
     optimizer_scheduler:
