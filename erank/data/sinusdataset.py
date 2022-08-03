@@ -82,11 +82,13 @@ class SinusDataset(BaseMetaDataset):
                  amplitude_range: List[float] = [0.1, 5.0],
                  phase_range: List[float] = [0, 2 * 3.14159265359],
                  x_range: List[float] = [-5, 5],
-                 regenerate_task_support_set: bool = False):  # regenerate support set on each call
+                 regenerate_task_support_set: bool = False, # regenerate support set on each call
+                 seed: int = 0): # seed only used for task generation
         super().__init__(support_size=support_size, query_size=query_size, num_tasks=num_tasks)
         assert len(amplitude_range) == 2 and len(phase_range) == 2 and len(x_range) == 2
-        self.amplitudes = np.random.default_rng().uniform(amplitude_range[0], amplitude_range[1], size=num_tasks)
-        self.phases = np.random.default_rng().uniform(phase_range[0], phase_range[1], size=num_tasks)
+        rng = np.random.default_rng(seed=seed)
+        self.amplitudes = rng.uniform(amplitude_range[0], amplitude_range[1], size=num_tasks)
+        self.phases = rng.uniform(phase_range[0], phase_range[1], size=num_tasks)
         self.x_range = x_range
         self.regenerate_task_support_set = regenerate_task_support_set
         # generate all tasks an hold them in memory

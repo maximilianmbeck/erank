@@ -29,13 +29,15 @@ sweep:
     - parameter: trainer.n_inner_iter
       vals: [1, 3, 5, 10, 20, 30, 100] #[3,5,10]
 
+start_num: 2
+
 ###
 config:
   experiment_data:
     entity: jkuiml-fsl # null
     project_name: erank_meta
     experiment_tag: "6.0"
-    experiment_name: sinus-${config.experiment_data.experiment_tag}-reptile_initial_exps-batch_size_${config.trainer.batch_size}-n_inner_iter_${config.trainer.n_inner_iter}
+    experiment_name: sinus-${config.experiment_data.experiment_tag}.${start_num}-reptile_initial_exps-batch_size_${config.trainer.batch_size}-n_inner_iter_${config.trainer.n_inner_iter}
     experiment_dir: null
     seed: 0
     hostname: null # the server on which the run is run, will be filled by run_handler
@@ -48,7 +50,7 @@ config:
         - erank
       notes: Hyperparametersearch for own Reptile implementation # str, used to make notes to wandblogger
       group: ${config.experiment_data.experiment_tag} # null
-      job_type: hypsearch1 # examples: hypsearch, pretrain, eval, etc.
+      job_type: startnum_${start_num} # examples: hypsearch, pretrain, eval, etc.
 
     watch:
       log: null #parameters #null #all
@@ -69,7 +71,7 @@ config:
   trainer:
     training_setup: reptile
     n_epochs: 100000 # number of iterations (outer/meta gradient steps)
-    log_train_epoch_every: 100
+    log_train_epoch_every: 1000
     val_every: 1000
     save_every: 10000
     early_stopping_patience: null # no early stopping
@@ -107,11 +109,13 @@ config:
       phase_range: [0, 6.283185307]
       x_range: [-5, 5]
       regenerate_task_support_set: False
+      seed: 0 # this seed is only used for task generation
     val_metadataset_kwargs:
       support_size: 10
       query_size: 50
-      num_tasks: 1000
+      num_tasks: 100 #1000
       amplitude_range: [0.1, 5.0]
       phase_range: [0, 6.283185307]
       x_range: [-5, 5]
       regenerate_task_support_set: False
+      seed: 1 # different from train dataset!
