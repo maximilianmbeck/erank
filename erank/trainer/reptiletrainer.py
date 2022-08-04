@@ -5,6 +5,7 @@ from typing import Dict, Tuple, List
 import torch
 import pandas as pd
 import torchmetrics
+import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from torch import nn
@@ -24,7 +25,8 @@ SAVEDIR_PRED_PLOT = 'pred_plots/'
 SAVEDIR_RESULTS = 'results/'
 SAVEFNAME_RESULTS_EVAL_TABLE = 'epoch-{epoch}-valtasks_results.csv'
 SAVEFNAME_LOSSES_INNER = 'epoch-{epoch}-losses_inner.png'
-DPI = 300
+SAVEFNAME_LOSSES_INNER_AVG = 'epoch-{epoch}-task_avg_losses_inner.png'
+DPI = 150
 
 
 class ReptileTrainer(ErankBaseTrainer):
@@ -37,6 +39,7 @@ class ReptileTrainer(ErankBaseTrainer):
         self._inner_optimizer = self.config.trainer.inner_optimizer
         self._n_inner_iter = self.config.trainer.n_inner_iter
         self._val_pred_plots_for_tasks = self.config.trainer.val_pred_plots_for_tasks
+        self._log_plot_inner_learning_curves = self.config.trainer.get('log_plot_inner_learning_curves', False)
 
         self._inner_eval_after_steps = self.config.trainer.get('inner_eval_after_steps', None)
         if self._inner_eval_after_steps is None:
@@ -44,6 +47,7 @@ class ReptileTrainer(ErankBaseTrainer):
             self._inner_eval_after_steps = [0, 1, 2, 3, 5, 10, 20, 30, 50]
         else:
             if not isinstance(self._inner_eval_after_steps, (list, ListConfig)):
+                assert isinstance(self._inner_eval_after_steps, (float, int))
                 self._inner_eval_after_steps = [self._inner_eval_after_steps]
             # make sure to always evaluate the meta/base model before finetuning
             if not 0 in self._inner_eval_after_steps:
@@ -141,6 +145,7 @@ class ReptileTrainer(ErankBaseTrainer):
                 - inner evaluation losses and metrics
                 - inner evaluation predictions
         """
+
         def do_eval_after_step(step: int):
             if i in eval_after_steps:
                 losses, preds = self._inner_loop_eval(inner_model, query_set)
@@ -177,7 +182,7 @@ class ReptileTrainer(ErankBaseTrainer):
 
             # metrics & logging
             losses_inner['loss'].append(loss.item())
-        
+
         # eval after fine-tuning
         i += 1
         do_eval_after_step(i)
@@ -232,8 +237,8 @@ class ReptileTrainer(ErankBaseTrainer):
                 # plt.close(fig)
 
         #! log val epoch
-        return self.__log_val_epoch(epoch, losses_inner_learning, losses_inner_eval, preds_plot_log)
-
+        val_score = self.__log_val_epoch(epoch, losses_inner_learning, losses_inner_eval, preds_plot_log)
+        return val_score
     ####
 
     def __log_train_epoch(self, epoch: int, losses_inner_learning: Dict[str, Dict[str, List[float]]],
@@ -291,7 +296,7 @@ class ReptileTrainer(ErankBaseTrainer):
         losses_inner_eval_after = dict()
         for task_name, task_log in losses_inner_eval.items():
             losses_inner_eval_before[task_name] = task_log[0]  # after 0 steps
-            losses_inner_eval_after[task_name] = task_log[self._n_inner_iter]  
+            losses_inner_eval_after[task_name] = task_log[self._n_inner_iter]
 
         # EVAL: prefix 'query{LOG_SEP_SYMBOL}': losses_inner_eval
         losses_eval_before_df = pd.DataFrame(losses_inner_eval_before).transpose().add_suffix(f'{LOG_SEP_SYMBOL}before')
@@ -315,12 +320,8 @@ class ReptileTrainer(ErankBaseTrainer):
 
         # make plot of losses_inner_learning for each task / a subset of each task
         losses_inner_plot_log = {}
-        fig, fname = self.__plot_inner_learning_curves(epoch, losses_inner_learning)
-        save_path = self._experiment_dir / SAVEDIR_LOSSES_INNER
-        save_path.mkdir(parents=True, exist_ok=True)
-        fig.savefig(save_path / fname, bbox_inches='tight', dpi=DPI)
-        losses_inner_plot_log['inner-losses'] = fig
-        # plt.close(fig)
+        if self._log_plot_inner_learning_curves:
+            losses_inner_plot_log = self.__plot_inner_learning_curves(epoch, losses_inner_learning)
 
         # log to wandb
         losses_epoch = dict(inner_train_step=self._inner_train_step,
@@ -336,14 +337,51 @@ class ReptileTrainer(ErankBaseTrainer):
         self._reset_metrics()
         return val_score
 
-    def __plot_inner_learning_curves(self, epoch: int,
-                                     losses_inner_learning: Dict[str, Dict[str, List[float]]]) -> Tuple[Figure, str]:
-        fig, ax = plt.subplots(1, 1)
+    def __plot_inner_learning_curves(self,
+                                     epoch: int,
+                                     losses_inner_learning: Dict[str, Dict[str, List[float]]],
+                                     dict_key_to_plot: str = 'loss') -> Dict[str, Figure]:
+        """Create plots of inner loss curves and return the plots in a dictionary with their description/name as key."""
+        # save path for plots
+        save_path = self._experiment_dir / SAVEDIR_LOSSES_INNER
+        save_path.mkdir(parents=True, exist_ok=True)
+
+        inner_loss_plots: Dict[str, Figure] = {}
+        inner_loss_values: Dict[str, List[float]] = {}
+
+        ## Single task losses
+        fig0, ax0 = plt.subplots(1, 1)
         # TODO adapt if log_dict contains multiple log losses
         for task_name, log_dict in losses_inner_learning.items():
-            ax.plot(log_dict['loss'], label=task_name)
-        ax.set_ylabel('inner-loss')
-        ax.set_xlabel('inner-steps')
-        ax.set_title(f'Epoch {epoch}: Loss curves inner-loop')
+            inner_loss_values[task_name] = log_dict[dict_key_to_plot]
+            ax0.plot(log_dict[dict_key_to_plot], label=task_name)
+        ax0.set_ylabel('inner-loss')
+        ax0.set_xlabel('inner-steps')
+        ax0.set_title(f'Epoch {epoch}: Loss curves inner-loop all tasks')
         # ax.legend() # wandb displays label, when hovering
-        return fig, SAVEFNAME_LOSSES_INNER.format(epoch=epoch)
+
+        fname = SAVEFNAME_LOSSES_INNER.format(epoch=epoch)
+        fig0.savefig(save_path / fname, bbox_inches='tight', dpi=DPI)
+        inner_loss_plots['inner-losses'] = fig0
+
+        ## Mean task loss
+        fig1, ax1 = plt.subplots(1, 1)
+        loss_taskmean = pd.DataFrame(inner_loss_values).mean(axis=1).to_numpy()
+        loss_taskstd = pd.DataFrame(inner_loss_values).std(axis=1).to_numpy()
+        ax1.plot(loss_taskmean, color='black', label='task avg')
+        # this raises an error with wandb
+        # ax1.fill_between(x=np.arange(len(loss_taskmean)),
+        #                 y1=loss_taskmean + loss_taskstd,
+        #                 y2=loss_taskmean - loss_taskstd, alpha=0.4)
+        # workaround:
+        ax1.plot(loss_taskmean+loss_taskstd, color='blue', label='+std')
+        ax1.plot(loss_taskmean-loss_taskstd, color='blue', label='-std')
+        ax1.set_ylabel('inner-loss')
+        ax1.set_xlabel('inner-steps')
+        ax1.set_title(f'Epoch {epoch}: Loss inner-loop, avg and std across {len(inner_loss_values)} tasks')
+
+        fname = SAVEFNAME_LOSSES_INNER_AVG.format(epoch=epoch)
+        fig1.savefig(save_path / fname, bbox_inches='tight', dpi=DPI)
+        inner_loss_plots['inner-losses-taskavg'] = fig1
+
+        return inner_loss_plots
