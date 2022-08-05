@@ -13,8 +13,9 @@ from tqdm import tqdm
 from omegaconf import DictConfig, ListConfig
 from erank.data import get_metadataset_class
 from erank.data.basemetadataset import support_query_as_minibatch
+from erank.regularization import LOG_LOSS_TOTAL_KEY
 from erank.trainer.erankbasetrainer import ErankBaseTrainer
-from ml_utilities.utils import convert_dict_to_python_types
+from ml_utilities.utils import convert_dict_to_python_types, convert_listofdicts_to_dictoflists
 from ml_utilities.torch_utils.factory import create_optimizer_and_scheduler
 
 LOGGER = logging.getLogger(__name__)
@@ -93,7 +94,7 @@ class ReptileTrainer(ErankBaseTrainer):
             # copy model parameters and do inner-loop learning
             inner_model = copy.deepcopy(self._model)
             inner_model, log_losses_inner_learning, _, _ = self._inner_loop_learning(
-                inner_model, support_set, eval_after_steps=[])  # no evaluation during inner-loop training
+                'train', inner_model, support_set, eval_after_steps=[])  # no evaluation during inner-loop training
 
             # eval on query set with inner-loop optimized model
             log_losses_inner_eval, query_preds = self._inner_loop_eval(inner_model, query_set)
@@ -125,22 +126,24 @@ class ReptileTrainer(ErankBaseTrainer):
 
     def _inner_loop_learning(
         self,
+        mode: str,
         inner_model: nn.Module,
         support_set: Tuple[torch.Tensor, torch.Tensor],
         query_set: Tuple[torch.Tensor, torch.Tensor] = None,
         eval_after_steps: List[int] = [0, 1, 2, 3, 5, 10, 20, 30, 50]
-    ) -> Tuple[nn.Module, Dict[str, List[float]], Dict[int, Dict[str, float]], Dict[int, torch.Tensor]]:
+    ) -> Tuple[nn.Module, List[Dict[str, torch.Tensor]], Dict[int, Dict[str, float]], Dict[int, torch.Tensor]]:
         """Inner learning loop. Training on `support_set` and evaluation on `query_set`. 
         Evaluation is performed after every step in `eval_after_steps`.
 
         Args:
+            mode (str): `train` or `val`. Might have effect on the loss used for example.
             inner_model (nn.Module): The base/meta model to finetune.
             support_set (Tuple[torch.Tensor, torch.Tensor]): The training set.
             query_set (Tuple[torch.Tensor, torch.Tensor]): The validation/test set.
             eval_after_steps (List[int]): Does evaluation after steps in this list.
 
         Returns:
-            Tuple[nn.Module, Dict[str, List[float]], Dict[int, Dict[str, float]], Dict[int, torch.Tensor]]: 
+            Tuple[nn.Module, List[Dict[str, torch.Tensor]], Dict[int, Dict[str, float]], Dict[int, torch.Tensor]]: 
                 - finetuned model
                 - inner training losses
                 - inner evaluation losses and metrics
@@ -148,13 +151,13 @@ class ReptileTrainer(ErankBaseTrainer):
         """
 
         def do_eval_after_step(step: int):
-            if i in eval_after_steps:
+            if step in eval_after_steps:
                 losses, preds = self._inner_loop_eval(inner_model, query_set)
-                losses_inner_eval[i] = losses
-                inner_eval_preds[i] = preds
+                losses_inner_eval[step] = losses
+                inner_eval_preds[step] = preds
 
         # log dicts
-        losses_inner = dict(loss=[])
+        losses_inner: List[Dict[str, torch.Tensor]] = []
         losses_inner_eval, inner_eval_preds = {}, {}
 
         inner_model.train(True)
@@ -169,9 +172,12 @@ class ReptileTrainer(ErankBaseTrainer):
             xs, ys = support_query_as_minibatch(support_set, self.device)
             # forward pass
             ys_pred = inner_model(xs)
-            loss = self._loss(ys_pred, ys)
-            # TODO erank regularization
-
+            if mode == 'train':
+                loss, loss_dict = self._loss(ys_pred, ys, inner_model)  # use regularization
+            elif mode == 'val':
+                loss, loss_dict = self._loss(ys_pred, ys)  # no regularization
+            else:
+                raise ValueError(f'Unsupported inner-loop learning mode: `{mode}`')
             # backward pass
             inner_optimizer.zero_grad()
             loss.backward()
@@ -182,7 +188,7 @@ class ReptileTrainer(ErankBaseTrainer):
             do_eval_after_step(i)
 
             # metrics & logging
-            losses_inner['loss'].append(loss.item())
+            losses_inner.append(loss_dict)
 
         # eval after fine-tuning
         i += 1
@@ -195,7 +201,7 @@ class ReptileTrainer(ErankBaseTrainer):
         xq, yq = support_query_as_minibatch(query_set, self.device)
         inner_model.train(False)
         yq_pred = inner_model(xq)
-        meta_loss = self._loss(yq_pred, yq)
+        meta_loss, loss_dict = self._loss(yq_pred, yq)
         # metrics & logging
         losses_inner_eval = dict()
         losses_inner_eval['loss'] = meta_loss.item()
@@ -221,7 +227,7 @@ class ReptileTrainer(ErankBaseTrainer):
 
             # fine-tune model for `n_inner_iter steps` and evaluate during finetuning after some gradient steps
             inner_model, log_losses_inner_learning, log_losses_inner_eval, eval_predictions = self._inner_loop_learning(
-                inner_model, support_set, query_set, eval_after_steps=self._inner_eval_after_steps)
+                'val', inner_model, support_set, query_set, eval_after_steps=self._inner_eval_after_steps)
 
             # track all logs
             losses_inner_eval[task.name] = log_losses_inner_eval
@@ -243,7 +249,7 @@ class ReptileTrainer(ErankBaseTrainer):
 
     ####
 
-    def __log_train_epoch(self, epoch: int, losses_inner_learning: Dict[str, Dict[str, List[float]]],
+    def __log_train_epoch(self, epoch: int, losses_inner_learning: Dict[str, List[Dict[str, torch.Tensor]]],
                           losses_inner_eval: Dict[str, Dict[str, float]]) -> None:
         """Log results of a training iteration (epoch).
 
@@ -263,30 +269,37 @@ class ReptileTrainer(ErankBaseTrainer):
         self._finish_train_epoch(epoch, losses_epoch)
 
     def __process_log_inner_learning(
-            self, log_dicts_losses_inner_learning: Dict[str, Dict[str, List[float]]]) -> List[Dict[str, float]]:
-        """We get a log_dict for every task (outer Dict[task.name, log_dict]). Each log_dict contains all losses and metrics as keys and a list of values corresponding to each 
+            self,
+            log_dicts_losses_inner_learning: Dict[str, List[Dict[str, torch.Tensor]]],
+            exclude_loss_keys: List[str] = [LOG_LOSS_TOTAL_KEY]) -> Dict[str, Dict[str, float]]:
+        """We get a list of log_dicts for every task (outer Dict[task.name, List[log_dict]]). The list contains the log_dict
+        for each update step.
+        Each log_dict contains all losses and metrics as keys and a list of values corresponding to a single 
         inner update step. 
         This method extracts meaningful information from these data that can be logged to a wandb panel.
         For now, for example: the metrics mean accross all inner step and the metrics after the last inner step."""
-        list_log_dict = []
-        for task_name, task_log_dict in log_dicts_losses_inner_learning.items():
+        task_summary_log_dicts = {}
+        for task_name, task_log_dicts in log_dicts_losses_inner_learning.items():
             log_dict = {}
-            for k, loss_list in task_log_dict.items():
-                # extract mean loss accross steps
-                log_dict[f'{k}_stepmean'] = torch.tensor(loss_list).mean().item()
-                # extract loss last step
-                log_dict[f'{k}_steplast'] = loss_list[-1]
-            list_log_dict.append(log_dict)
-        return list_log_dict
+            task_log_dict = convert_listofdicts_to_dictoflists(task_log_dicts, convert_vals_to_python_types=True)
+            task_log_df = pd.DataFrame(task_log_dict).drop(columns=exclude_loss_keys)
+            # extract loss of the first step
+            log_dict.update(task_log_df.iloc[0].add_suffix(f'{LOG_SEP_SYMBOL}stepfirst').to_dict())
+            # extract mean loss across steps
+            log_dict.update(task_log_df.mean().add_suffix(f'{LOG_SEP_SYMBOL}stepmean').to_dict())
+            # extract loss of the last step
+            log_dict.update(task_log_df.iloc[-1].add_suffix(f'{LOG_SEP_SYMBOL}steplast').to_dict())
+            task_summary_log_dicts[task_name] = log_dict
+        return task_summary_log_dicts
 
-    def __log_val_epoch(self, epoch: int, losses_inner_learning: Dict[str, Dict[str, List[float]]],
+    def __log_val_epoch(self, epoch: int, losses_inner_learning: Dict[str, List[Dict[str, torch.Tensor]]],
                         losses_inner_eval: Dict[int, Dict[str, Dict[str, float]]],
                         preds_plot_log: Dict[str, Figure]) -> float:
         """Log results of a validation iteration (epoch).
 
         Args:
             epoch (int): epoch
-            losses_inner_learning (Dict[str, Dict[str, List[float]]]): Dict levels: Task->metric/loss->Values at inner steps
+            losses_inner_learning (Dict[str, List[Dict[str, torch.Tensor]]]): Dict levels: Task->metric/loss->Values at inner steps
             losses_inner_eval (Dict[int, Dict[str, Dict[str, float]]]): Dict levels: inner_steps->Task->metric/loss->Value
             preds_plot_log (Dict[str, Figure]): Dict levels: Task->Plot
 
@@ -317,8 +330,9 @@ class ReptileTrainer(ErankBaseTrainer):
 
         # LEARNING: prefix 'support{LOG_SEP_SYMBOL}': losses_inner_learning
         processed_losses_inner_learning = self.__process_log_inner_learning(losses_inner_learning)
-        log_dict_losses_inner_learning: Dict[str, float] = pd.DataFrame(processed_losses_inner_learning).mean(
-        ).add_prefix(f'support{LOG_SEP_SYMBOL}').add_suffix(f'{LOG_SEP_SYMBOL}taskmean').to_dict()
+        log_dict_losses_inner_learning: Dict[str, Dict[str, float]] = pd.DataFrame(
+            processed_losses_inner_learning).transpose().mean().add_prefix(f'support{LOG_SEP_SYMBOL}').add_suffix(
+                f'{LOG_SEP_SYMBOL}taskmean').to_dict()
 
         # make plot of losses_inner_learning for each task / a subset of each task
         losses_inner_plot_log = {}
@@ -341,22 +355,25 @@ class ReptileTrainer(ErankBaseTrainer):
 
     def __plot_inner_learning_curves(self,
                                      epoch: int,
-                                     losses_inner_learning: Dict[str, Dict[str, List[float]]],
-                                     dict_key_to_plot: str = 'loss') -> Dict[str, Figure]:
+                                     log_dicts_losses_inner_learning: Dict[str, List[Dict[str, torch.Tensor]]],
+                                     loss_key_to_plot: str = LOG_LOSS_TOTAL_KEY) -> Dict[str, Figure]:
         """Create plots of inner loss curves and return the plots in a dictionary with their description/name as key."""
         # save path for plots
         save_path = self._experiment_dir / SAVEDIR_LOSSES_INNER
         save_path.mkdir(parents=True, exist_ok=True)
+        # labels for plots
+        y_label = f'inner-{loss_key_to_plot}'
+        x_label = 'inner-steps'
 
         inner_loss_plots: Dict[str, Figure] = {}
         inner_loss_values: Dict[str, List[float]] = {}
 
         ## Single task losses
         fig0, ax0 = plt.subplots(1, 1)
-        # TODO adapt if log_dict contains multiple log losses
-        for task_name, log_dict in losses_inner_learning.items():
-            inner_loss_values[task_name] = log_dict[dict_key_to_plot]
-            ax0.plot(log_dict[dict_key_to_plot], label=task_name)
+        for task_name, task_log_dicts in log_dicts_losses_inner_learning.items():
+            task_log_dict = convert_listofdicts_to_dictoflists(task_log_dicts, convert_vals_to_python_types=True)
+            inner_loss_values[task_name] = task_log_dict[loss_key_to_plot]
+            ax0.plot(task_log_dict[loss_key_to_plot], label=task_name)
 
         #
         loss_taskmean = pd.DataFrame(inner_loss_values).mean(axis=1).to_numpy()
@@ -366,14 +383,14 @@ class ReptileTrainer(ErankBaseTrainer):
             self.__inner_learning_curves_ylim_upper = loss_taskmean[0] + 2 * loss_taskstd[0]
         #
         ax0.set_ylim(bottom=0., top=self.__inner_learning_curves_ylim_upper)
-        ax0.set_ylabel('inner-loss')
-        ax0.set_xlabel('inner-steps')
-        ax0.set_title(f'Epoch {epoch}: Loss curves inner-loop all tasks')
+        ax0.set_ylabel(y_label)
+        ax0.set_xlabel(x_label)
+        ax0.set_title(f'Epoch {epoch}: {loss_key_to_plot} curves inner-loop, all tasks')
         # ax.legend() # wandb displays label, when hovering
 
         fname = SAVEFNAME_LOSSES_INNER.format(epoch=epoch)
         fig0.savefig(save_path / fname, bbox_inches='tight', dpi=DPI)
-        inner_loss_plots['inner-losses'] = fig0
+        inner_loss_plots[f'inner-{loss_key_to_plot}'] = fig0
 
         ## Mean task loss
         fig1, ax1 = plt.subplots(1, 1)
@@ -385,14 +402,13 @@ class ReptileTrainer(ErankBaseTrainer):
         # workaround:
         ax1.plot(loss_taskmean + loss_taskstd, color='blue', label='+std')
         ax1.plot(loss_taskmean - loss_taskstd, color='blue', label='-std')
-        ax1.set_ylabel('inner-loss')
-        ax1.set_xlabel('inner-steps')
-        ax1.set_title(f'Epoch {epoch}: Loss inner-loop, avg and std across {len(inner_loss_values)} tasks')
+        ax1.set_ylabel(y_label)
+        ax1.set_xlabel(x_label)
+        ax1.set_title(f'Epoch {epoch}: {loss_key_to_plot} inner-loop, avg and std across {len(inner_loss_values)} tasks')
         ax1.set_ylim(bottom=0., top=self.__inner_learning_curves_ylim_upper)
-
 
         fname = SAVEFNAME_LOSSES_INNER_AVG.format(epoch=epoch)
         fig1.savefig(save_path / fname, bbox_inches='tight', dpi=DPI)
-        inner_loss_plots['inner-losses-taskavg'] = fig1
+        inner_loss_plots[f'inner-{loss_key_to_plot}-taskavg'] = fig1
 
         return inner_loss_plots

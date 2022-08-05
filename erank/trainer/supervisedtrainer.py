@@ -80,7 +80,7 @@ class SupervisedTrainer(ErankBaseTrainer):
             loss_weight = 0.0
             if self._erank_regularizer is not None:
                 loss_reg = self._erank_regularizer.forward(self._model)
-                loss_weight = self._erank_regularizer.loss_weight
+                loss_weight = self._erank_regularizer.loss_coefficient
 
             loss_total = loss + loss_weight * loss_reg
 

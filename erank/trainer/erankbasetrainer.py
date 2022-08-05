@@ -12,7 +12,7 @@ from ml_utilities.torch_utils import get_loss
 from ml_utilities.trainers.basetrainer import BaseTrainer
 from ml_utilities.torch_utils.factory import create_optimizer_and_scheduler
 from hydra.core.hydra_config import HydraConfig
-from erank.regularization import EffectiveRankRegularization
+from erank.regularization import EffectiveRankRegularization, RegularizedLoss
 
 LOGGER = logging.getLogger(__name__)
 
@@ -69,9 +69,11 @@ class ErankBaseTrainer(BaseTrainer):
     def _create_loss(self) -> None:
         LOGGER.info('Creating loss.')
         loss_cls = get_loss(self.config.trainer.loss)
-        self._loss = loss_cls(reduction='mean')
+        loss_module = loss_cls(reduction='mean')
 
         self._erank_regularizer = self._create_erank_regularizer(self._model)
+        self._loss = RegularizedLoss(loss_module)
+        self._loss.add_regularizer(self._erank_regularizer)
 
     def _create_erank_regularizer(self, model: nn.Module) -> EffectiveRankRegularization:
         erank_cfg = self.config.trainer.get('erank', None)
@@ -82,7 +84,7 @@ class ErankBaseTrainer(BaseTrainer):
             LOGGER.info(f'Erank regularization of type {erank_cfg.type}.')
             erank_reg = EffectiveRankRegularization(buffer_size=erank_cfg.buffer_size,
                                                     init_model=model,
-                                                    loss_weight=erank_cfg.loss_weight,
+                                                    loss_coefficient=erank_cfg.loss_coefficient,
                                                     normalize_directions=erank_cfg.get('norm_directions', False),
                                                     use_abs_model_params=erank_cfg.get('use_abs_model_params', True))
             if erank_cfg.type == 'random':
