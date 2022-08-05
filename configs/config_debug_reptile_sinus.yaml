@@ -93,7 +93,7 @@ config:
 
     loss: mse
     # erank:
-    #   type: none #pretraindiff #none #random #pretraindiff
+    #   type: none #weightsdiff #none #random
     #   loss_weight: XXX
     #   dir_buffer: null
     #   buffer_size: 10 # number of directions stored in the buffer

@@ -78,7 +78,7 @@ class ErankBaseTrainer(BaseTrainer):
         erank_reg = None
         if erank_cfg is None or erank_cfg.type == 'none':
             LOGGER.info('No erank regularizer.')
-        elif erank_cfg.type in ['random', 'pretraindiff']:
+        elif erank_cfg.type in ['random', 'weightsdiff']:
             LOGGER.info(f'Erank regularization of type {erank_cfg.type}.')
             erank_reg = EffectiveRankRegularization(buffer_size=erank_cfg.buffer_size,
                                                     init_model=model,
@@ -87,7 +87,7 @@ class ErankBaseTrainer(BaseTrainer):
                                                     use_abs_model_params=erank_cfg.get('use_abs_model_params', True))
             if erank_cfg.type == 'random':
                 erank_reg.init_directions_buffer(random_buffer=True)
-            elif erank_cfg.type == 'pretraindiff':
+            elif erank_cfg.type == 'weightsdiff':
                 erank_reg.init_directions_buffer(path_to_buffer_or_runs=erank_cfg.dir_buffer)
         else:
             raise ValueError(f'Unknown erank type: {erank_cfg.type}')
