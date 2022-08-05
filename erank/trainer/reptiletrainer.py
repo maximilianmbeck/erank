@@ -54,6 +54,7 @@ class ReptileTrainer(ErankBaseTrainer):
                 self._inner_eval_after_steps.append(0)
 
         self._inner_train_step = 0
+        self.__inner_learning_curves_ylim_upper = None
 
     def _create_datasets(self) -> None:
         LOGGER.info('Loading train/val dataset.')
@@ -239,11 +240,12 @@ class ReptileTrainer(ErankBaseTrainer):
         #! log val epoch
         val_score = self.__log_val_epoch(epoch, losses_inner_learning, losses_inner_eval, preds_plot_log)
         return val_score
+
     ####
 
     def __log_train_epoch(self, epoch: int, losses_inner_learning: Dict[str, Dict[str, List[float]]],
                           losses_inner_eval: Dict[str, Dict[str, float]]) -> None:
-        """Log results of a training iteration (epoch):
+        """Log results of a training iteration (epoch).
 
         Args:
             epoch (int): epoch
@@ -355,6 +357,15 @@ class ReptileTrainer(ErankBaseTrainer):
         for task_name, log_dict in losses_inner_learning.items():
             inner_loss_values[task_name] = log_dict[dict_key_to_plot]
             ax0.plot(log_dict[dict_key_to_plot], label=task_name)
+
+        #
+        loss_taskmean = pd.DataFrame(inner_loss_values).mean(axis=1).to_numpy()
+        loss_taskstd = pd.DataFrame(inner_loss_values).std(axis=1).to_numpy()
+        if self.__inner_learning_curves_ylim_upper is None:
+            # ylim is very first loss + 2*std and assume loss is decreasing
+            self.__inner_learning_curves_ylim_upper = loss_taskmean[0] + 2 * loss_taskstd[0]
+        #
+        ax0.set_ylim(bottom=0., top=self.__inner_learning_curves_ylim_upper)
         ax0.set_ylabel('inner-loss')
         ax0.set_xlabel('inner-steps')
         ax0.set_title(f'Epoch {epoch}: Loss curves inner-loop all tasks')
@@ -366,19 +377,19 @@ class ReptileTrainer(ErankBaseTrainer):
 
         ## Mean task loss
         fig1, ax1 = plt.subplots(1, 1)
-        loss_taskmean = pd.DataFrame(inner_loss_values).mean(axis=1).to_numpy()
-        loss_taskstd = pd.DataFrame(inner_loss_values).std(axis=1).to_numpy()
         ax1.plot(loss_taskmean, color='black', label='task avg')
         # this raises an error with wandb
         # ax1.fill_between(x=np.arange(len(loss_taskmean)),
         #                 y1=loss_taskmean + loss_taskstd,
         #                 y2=loss_taskmean - loss_taskstd, alpha=0.4)
         # workaround:
-        ax1.plot(loss_taskmean+loss_taskstd, color='blue', label='+std')
-        ax1.plot(loss_taskmean-loss_taskstd, color='blue', label='-std')
+        ax1.plot(loss_taskmean + loss_taskstd, color='blue', label='+std')
+        ax1.plot(loss_taskmean - loss_taskstd, color='blue', label='-std')
         ax1.set_ylabel('inner-loss')
         ax1.set_xlabel('inner-steps')
         ax1.set_title(f'Epoch {epoch}: Loss inner-loop, avg and std across {len(inner_loss_values)} tasks')
+        ax1.set_ylim(bottom=0., top=self.__inner_learning_curves_ylim_upper)
+
 
         fname = SAVEFNAME_LOSSES_INNER_AVG.format(epoch=epoch)
         fig1.savefig(save_path / fname, bbox_inches='tight', dpi=DPI)
