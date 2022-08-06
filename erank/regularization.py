@@ -12,6 +12,7 @@ LOGGER = logging.getLogger(__name__)
 LOG_LOSS_PREFIX = 'loss'
 LOG_LOSS_TOTAL_KEY = f'{LOG_LOSS_PREFIX}_total'
 
+
 class Regularizer(nn.Module, ABC):
     """A class defining the interface for a regularizer.
 
@@ -46,7 +47,9 @@ class RegularizedLoss(nn.Module):
         self.loss_module = loss
         self._regularizers: Dict[str, Regularizer] = {}
 
-    def forward(self, y_preds: torch.Tensor, y_labels: torch.Tensor,
+    def forward(self,
+                y_preds: torch.Tensor,
+                y_labels: torch.Tensor,
                 model: nn.Module = None) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         loss_dict = {}
         loss = self.loss_module(y_preds, y_labels)
@@ -78,20 +81,43 @@ class RegularizedLoss(nn.Module):
 
 class EffectiveRankRegularization(Regularizer):
     """Regularization of the effective rank that discourages weights from opening up new dimensions.
+    At the core of this "regularizer" (not sure, if this method can be considered as regularization at all) 
+    is a (direction) matrix M, which contains in its rows the weights of a neural network model. 
+    The (direction) matrix M can be divided in two parts (The vectors in these parts are stacked in rows.): 
+    - The subspace vectors (`subspace_vecs`): Weight vectors determining a subspace of the model being optimized. 
+            These vectors are detached and are not optimized (at least so far).
+    - The model vector (`optim_model_vec`): The parameters of the model being optimized flattened as a vector.
 
     For more information on effective rank, see [#]_.
 
     Args:
-        buffer_size (int): Number of models in the directions matrix. 
         init_model (nn.Module): Initialized model
         loss_coefficient (float): The weighting factor of the Effective Rank regularization term.
-        normalize_directions (bool, optional): Normalized all model parameters in the directions matrix, 
-                                               i.e. all directions to 1 before computing the erank. Defaults to False.
-        use_abs_model_params (bool, optional): If true, use absolute model parameters in for the direction matrix. 
-                                               The models are stacked, i.e. each row contains the parameters of a model. 
-                                               If false, use model training differences, i.e. for pretrained models: 
-                                               best model minus initialization. For the model that is optimized during training 
-                                               use current model parameters minus previous model parameters. 
+        buffer_size (int): Number of subspace vectors in the directions matrix M. 
+        buffer_mode (str): Mode for internal buffer.
+                           Options:
+                             - none: Disable internal buffer. Subspace vecs are kept constant after initialization throughout training.
+                             - backlog: Keeps subspace vectors in a separate backlog buffer and swaps them in for directions matrix M 
+                                        upon request. The backlog buffer is stored on CPU memory by default.
+                             - queue: Uses a queue and keep always the last `buffer_size` subspace vectors. 
+                                      The subspace vectors in the queue are stored on CPU memory by default.
+        optim_model_vec_mode (str): Preprocessing mode for the flattened model parameter vector (of the model being optimized).
+                                    Preprocessing is done before computing the directions matrix M.
+                                    Options:
+                                      - abs: absolute model parameters
+                                      - initdiff: difference between initialization and the current model
+                                      - stepdiff: last model step diff, i.e. the difference between the last model 
+                                                  and the current model during training
+                                      - basediff: difference between current model to a specific set of "base parameters"
+        subspace_vecs_mode (str): Preprocessing mode for the subspace vectors. Preprocessing is done before computing the directions
+                                  matrix M.
+                                  Options:
+                                    - abs: absolute model parameters
+                                    - initdiff: difference between initialization and trained model
+                                    - basediff: difference of the vectors to add to a specific set of "base parameters"
+        normalize_directions (bool, optional): Normalize all model parameters in the directions matrix M, 
+                                               i.e. all row vectors in M are normalized to 1 before computing the erank. 
+                                               Defaults to False. 
 
     References:
         .. [#] Roy, Olivier, and Martin Vetterli. "The effective rank: A measure of effective dimensionality."
@@ -99,26 +125,54 @@ class EffectiveRankRegularization(Regularizer):
     """
 
     def __init__(self,
-                 buffer_size: int,
                  init_model: nn.Module,
                  loss_coefficient: float,
-                 normalize_directions: bool = False,
-                 use_abs_model_params: bool = False,
+                 buffer_size: int,
+                 buffer_mode: str, # none, queue, backlog
+                 optim_model_vec_mode: str = 'abs', # abs, stepdiff, initdiff, basediff
+                 subspace_vecs_mode: str = 'initdiff', # abs, initdiff, basediff
+                 normalize_dir_matrix_m: bool = False,
                  name: str = 'erank'):
         super().__init__(name=name, loss_coefficient=loss_coefficient)
-        self.buffer_size = buffer_size  # number of directions in the buffer
+        self.buffer_size = buffer_size  # number of subspace vectors / directions in the buffer
         self._device = next(iter(init_model.parameters())).device
 
-        self._normalize_directions = normalize_directions
+        self._normalize_dir_matrix_m = normalize_dir_matrix_m
         self._use_abs_model_params = use_abs_model_params
 
         # directions buffer is a tensor containing all directions that span the subspace
         # it has shape: buffer_size x n_params of the model
-        self._directions_buffer = torch.tensor([], device=self._device)
+        self._subspace_vecs = torch.tensor([], device=self._device)
         # the params to compute the delta of the current model step to
-        # We use a deque here as we want to compute the difference to the PREVIOUS step. Therefore we access the 0th element for computing the difference.
-        self._delta_start_params_queue = deque(maxlen=2)
+        # We use a deque here as we want to compute the difference to the PREVIOUS step.
+        self._delta_start_params_queue = deque(maxlen=2) # TODO rename this + methods and make optional (to save gpu memory)
         self._delta_start_params_queue.append(nn.utils.parameters_to_vector(init_model.parameters()).detach())
+
+    def init_subspace_vecs(self, path_to_buffer_or_runs: str = '', random_buffer: bool = False) -> None:
+        if random_buffer:
+            n_model_params = self._delta_start_params_queue[0].shape[0]
+            directions_buffer = torch.normal(mean=0,
+                                             std=1,
+                                             size=(self.buffer_size, n_model_params),
+                                             device=self._device)
+        else:
+            assert path_to_buffer_or_runs
+            load_path = Path(path_to_buffer_or_runs)
+            if load_path.is_dir():
+
+                directions_buffer = load_directions_matrix_from_task_sweep(
+                    load_path,
+                    num_runs=self.buffer_size,
+                    device=self._device,
+                    use_absolute_model_params=self._use_abs_model_params)
+                LOGGER.info(
+                    f'Loaded erank directions from run dir {path_to_buffer_or_runs} (shape {directions_buffer.shape}).')
+            else:
+                raise NotImplementedError('Loading file not supported.')
+
+        assert directions_buffer.shape[
+            0] == self.buffer_size, f'Specified buffer size is {self.buffer_size}, but given directions_buffer as shape {directions_buffer.shape}.'
+        self._subspace_vecs = directions_buffer
 
     def update_delta_start_params(self, model: nn.Module) -> None:
         """Updates the start vector to which the delta of the next parameter update of the model will be computed
@@ -145,41 +199,16 @@ class EffectiveRankRegularization(Regularizer):
 
     def get_normalized_erank(self) -> float:
         """Returns the normalized effective rank of matrix composed of the last model and the pretrained models."""
-        if self._directions_buffer.shape[0] < self.buffer_size or len(self._delta_start_params_queue) < 2:
+        if self._subspace_vecs.shape[0] < self.buffer_size or len(self._delta_start_params_queue) < 2:
             return torch.tensor(0.0, dtype=torch.float32, device=self._device)
         model = self._delta_start_params_queue[-1]
-        directions_matrix = self._construct_directions_matrix(model, use_abs_model_params=True, normalize_matrix=True)
+        directions_matrix = self._construct_directions_matrix_m(model, use_abs_model_params=True, normalize_matrix=True)
         return EffectiveRankRegularization.erank(directions_matrix)
 
-    def init_directions_buffer(self, path_to_buffer_or_runs: str = '', random_buffer: bool = False) -> None:
-        if random_buffer:
-            n_model_params = self._delta_start_params_queue[0].shape[0]
-            directions_buffer = torch.normal(mean=0,
-                                             std=1,
-                                             size=(self.buffer_size, n_model_params),
-                                             device=self._device)
-        else:
-            assert path_to_buffer_or_runs
-            load_path = Path(path_to_buffer_or_runs)
-            if load_path.is_dir():
 
-                directions_buffer = load_directions_matrix_from_task_sweep(
-                    load_path,
-                    num_runs=self.buffer_size,
-                    device=self._device,
-                    use_absolute_model_params=self._use_abs_model_params)
-                LOGGER.info(
-                    f'Loaded erank directions from run dir {path_to_buffer_or_runs} (shape {directions_buffer.shape}).')
-            else:
-                raise NotImplementedError('Loading file not supported.')
-
-        assert directions_buffer.shape[
-            0] == self.buffer_size, f'Specified buffer size is {self.buffer_size}, but given directions_buffer as shape {directions_buffer.shape}.'
-        self._directions_buffer = directions_buffer
-
-    def _construct_directions_matrix(self, model: nn.Module, use_abs_model_params: bool,
-                                     normalize_matrix: bool) -> torch.Tensor:
-        """Constructs the directions matrix (which is used to calculate the erank). 
+    def _construct_directions_matrix_m(self, model: nn.Module, optim_model_vec_mode: bool,
+                                       normalize_matrix: bool) -> torch.Tensor:
+        """Constructs the directions matrix M (which is used to calculate the erank). 
         Each row contains the parameters of a (pretrained) model flattened as a vector."""
         delta_end_params = nn.utils.parameters_to_vector(model.parameters())  # not detached!
         if use_abs_model_params:
@@ -188,7 +217,7 @@ class EffectiveRankRegularization(Regularizer):
         else:
             # concatenate last update step
             delta = delta_end_params - self._delta_start_params_queue[0]
-        directions_matrix = torch.cat([delta.unsqueeze(dim=0), self._directions_buffer],
+        directions_matrix = torch.cat([delta.unsqueeze(dim=0), self._subspace_vecs],
                                       dim=0)  # shape: (n_directions, n_model_parameters)
         if normalize_matrix:
             directions_matrix = directions_matrix / torch.linalg.norm(directions_matrix, ord=2, dim=1, keepdim=True)
@@ -204,10 +233,10 @@ class EffectiveRankRegularization(Regularizer):
             torch.Tensor: Effective Rank regularization term.
         """
         # Apply erank regularization only if directions buffer is full and we have a first step in the delta_start_params_queue
-        if self._directions_buffer.shape[0] < self.buffer_size or len(self._delta_start_params_queue) < 2:
+        if self._subspace_vecs.shape[0] < self.buffer_size or len(self._delta_start_params_queue) < 2:
             return torch.tensor(0.0, dtype=torch.float32, device=self._device)
-        directions_matrix = self._construct_directions_matrix(model, self._use_abs_model_params,
-                                                              self._normalize_directions)
+        directions_matrix = self._construct_directions_matrix_m(model, self._use_abs_model_params,
+                                                                self._normalize_dir_matrix_m)
         return EffectiveRankRegularization.erank(directions_matrix)
 
     @staticmethod

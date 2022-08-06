@@ -111,11 +111,13 @@ class ReptileTrainer(ErankBaseTrainer):
                 else:
                     meta_model_param.grad.add_(g)
 
+            # TODO from here: fill erank-buffer
             # track all logs
             losses_inner_learning[task.name] = log_losses_inner_learning
             losses_inner_eval[task.name] = log_losses_inner_eval
 
         #! meta-model gradient step
+        # TODO log outer grad norm -> write a grad norm method in ml_utilities
         # outer loop step / update meta-parameters
         self._optimizer.step()
         self._optimizer.zero_grad()
@@ -247,7 +249,7 @@ class ReptileTrainer(ErankBaseTrainer):
         val_score = self.__log_val_epoch(epoch, losses_inner_learning, losses_inner_eval, preds_plot_log)
         return val_score
 
-    ####
+    ###### LOGGING 
 
     def __log_train_epoch(self, epoch: int, losses_inner_learning: Dict[str, List[Dict[str, torch.Tensor]]],
                           losses_inner_eval: Dict[str, Dict[str, float]]) -> None:

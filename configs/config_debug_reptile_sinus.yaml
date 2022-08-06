@@ -94,11 +94,13 @@ config:
     loss: mse
     erank:
       type: random #weightsdiff #none #random
-      loss_coefficient: 1.0 #XXX
       dir_buffer: null
-      buffer_size: 10 # number of directions stored in the buffer
-      norm_directions: False
-      use_abs_model_params: True
+      erank_kwargs:
+        loss_coefficient: 1.0 #XXX
+        buffer_size: 10 # number of directions stored in the buffer
+        optim_model_vec_mode: basediff # abs, stepdiff, basediff
+        subspace_vecs_mode: basedif # abs, initdiff, basediff
+        normalize_dir_matrix_m: False
     num_workers: 4
 
   data: 

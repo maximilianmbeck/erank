@@ -76,6 +76,7 @@ class ErankBaseTrainer(BaseTrainer):
         self._loss.add_regularizer(self._erank_regularizer)
 
     def _create_erank_regularizer(self, model: nn.Module) -> EffectiveRankRegularization:
+        # TODO refactor
         erank_cfg = self.config.trainer.get('erank', None)
         erank_reg = None
         if erank_cfg is None or erank_cfg.type == 'none':
@@ -85,7 +86,7 @@ class ErankBaseTrainer(BaseTrainer):
             erank_reg = EffectiveRankRegularization(buffer_size=erank_cfg.buffer_size,
                                                     init_model=model,
                                                     loss_coefficient=erank_cfg.loss_coefficient,
-                                                    normalize_directions=erank_cfg.get('norm_directions', False),
+                                                    normalize_dir_matrix_m=erank_cfg.get('norm_directions', False),
                                                     use_abs_model_params=erank_cfg.get('use_abs_model_params', True))
             if erank_cfg.type == 'random':
                 erank_reg.init_directions_buffer(random_buffer=True)
