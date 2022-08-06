@@ -202,12 +202,13 @@ class ReptileTrainer(ErankBaseTrainer):
                          query_set: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[Dict[str, float], torch.Tensor]:
         xq, yq = support_query_as_minibatch(query_set, self.device)
         inner_model.train(False)
-        yq_pred = inner_model(xq)
-        meta_loss, loss_dict = self._loss(yq_pred, yq)
+        with torch.no_grad():
+            yq_pred = inner_model(xq)
+            meta_loss, loss_dict = self._loss(yq_pred, yq)
+            metric_vals = self._train_metrics(yq_pred, yq)
         # metrics & logging
         losses_inner_eval = dict()
-        losses_inner_eval['loss'] = meta_loss.item()
-        metric_vals = self._train_metrics(yq_pred, yq)
+        losses_inner_eval['loss'] = meta_loss.item() # TODO refactor: extract information from loss_dict
         # put train metrics into log dict
         losses_inner_eval.update(convert_dict_to_python_types(metric_vals))
         return losses_inner_eval, yq_pred.detach().cpu()
