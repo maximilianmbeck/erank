@@ -5,4 +5,4 @@ sweep:
   subdir: ${hydra.job.num}
 job:
   chdir: True # change working directory of run
-  name: ${config.experiment_data.experiment_name}_${now:%d%m%y_%H%M%S}
+  name: ${config.experiment_data.experiment_name}_${now:%y%m%d_%H%M%S}
