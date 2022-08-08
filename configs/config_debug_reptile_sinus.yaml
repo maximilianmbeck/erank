@@ -98,8 +98,10 @@ config:
       erank_kwargs:
         loss_coefficient: 1.0 #XXX
         buffer_size: 10 # number of directions stored in the buffer
+        buffer_mode: backlog # none, backlog, queue
         optim_model_vec_mode: basediff # abs, stepdiff, basediff
-        subspace_vecs_mode: basedif # abs, initdiff, basediff
+        subspace_vecs_mode: basediff # abs, initdiff, basediff
+        track_last_n_model_steps: 0
         normalize_dir_matrix_m: False
     num_workers: 4
 

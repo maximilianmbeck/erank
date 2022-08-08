@@ -99,9 +99,6 @@ class ReptileTrainer(ErankBaseTrainer):
             # eval on query set with inner-loop optimized model
             log_losses_inner_eval, query_preds = self._inner_loop_eval(inner_model, query_set)
 
-            #? ERANK: add to buffer
-
-
             #! meta-model gradient update
             # after inner-loop optimization: accumulate gradients in self._model.grad / meta_model
             # calculate meta-gradient: meta_model - task_model | paramters(self._model) - parameters(inner_model) | g = phi - phi_i
@@ -114,7 +111,10 @@ class ReptileTrainer(ErankBaseTrainer):
                 else:
                     meta_model_param.grad.add_(g)
 
-            # TODO from here: fill erank-buffer
+            #? ERANK: add to buffer
+            if self._erank_regularizer:
+                self._erank_regularizer.add_subspace_vec(inner_model)
+
             # track all logs
             losses_inner_learning[task.name] = log_losses_inner_learning
             losses_inner_eval[task.name] = log_losses_inner_eval
@@ -127,7 +127,8 @@ class ReptileTrainer(ErankBaseTrainer):
         self._train_step += 1
 
         #? ERANK: sets a reference to base model
-        self._erank_regularizer.set_base_model(self._model, deepcopy=False)
+        if self._erank_regularizer:
+            self._erank_regularizer.set_base_model(self._model)
 
         # log epoch
         self.__log_train_epoch(epoch, losses_inner_learning, losses_inner_eval)
@@ -256,7 +257,7 @@ class ReptileTrainer(ErankBaseTrainer):
         val_score = self.__log_val_epoch(epoch, losses_inner_learning, losses_inner_eval, preds_plot_log)
         return val_score
 
-    ###### LOGGING 
+    ###### LOGGING
 
     def __log_train_epoch(self, epoch: int, losses_inner_learning: Dict[str, List[Dict[str, torch.Tensor]]],
                           losses_inner_eval: Dict[str, Dict[str, float]]) -> None:
@@ -413,7 +414,8 @@ class ReptileTrainer(ErankBaseTrainer):
         ax1.plot(loss_taskmean - loss_taskstd, color='blue', label='-std')
         ax1.set_ylabel(y_label)
         ax1.set_xlabel(x_label)
-        ax1.set_title(f'Epoch {epoch}: {loss_key_to_plot} inner-loop, avg and std across {len(inner_loss_values)} tasks')
+        ax1.set_title(
+            f'Epoch {epoch}: {loss_key_to_plot} inner-loop, avg and std across {len(inner_loss_values)} tasks')
         ax1.set_ylim(bottom=0., top=self.__inner_learning_curves_ylim_upper)
 
         fname = SAVEFNAME_LOSSES_INNER_AVG.format(epoch=epoch)
