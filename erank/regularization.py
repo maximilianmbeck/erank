@@ -1,9 +1,9 @@
+import torch
+import logging
 from abc import ABC, abstractmethod
 from collections import deque
 from pathlib import Path
-from typing import Dict, Tuple
-import torch
-import logging
+from typing import Deque, Dict, List, Tuple
 from torch import nn
 from erank.utils import load_directions_matrix_from_task_sweep
 
@@ -125,6 +125,9 @@ class EffectiveRankRegularization(Regularizer):
         .. [#] Roy, Olivier, and Martin Vetterli. "The effective rank: A measure of effective dimensionality."
                2007 15th European Signal Processing Conference. IEEE, 2007.
     """
+    buffer_modes = ['none', 'backlog', 'queue']
+    optim_model_vec_modes = ['abs', 'initdiff', 'stepdiff', 'basediff']
+    subspace_vecs_modes = ['abs', 'initdiff', 'basediff']
 
     def __init__(
             self,
@@ -146,13 +149,30 @@ class EffectiveRankRegularization(Regularizer):
         self.normalize_dir_matrix_m = normalize_dir_matrix_m
         self._device = next(iter(init_model.parameters())).device
 
-        # TODO init backlog or queue according to mode, define interface for modifying these caches (need two methods!)
+        assert self.buffer_mode in EffectiveRankRegularization.buffer_modes, f'Unknown buffer mode: {self.buffer_mode}'
+        assert self.optim_model_vec_mode in EffectiveRankRegularization.optim_model_vec_modes, f'Unknown optimized model vector mode: {self.optim_model_vec_mode}'
+        assert self.subspace_vecs_mode in EffectiveRankRegularization.subspace_vecs_modes, f'Unknwon subspace vectors mode: {self.subspace_vecs_mode}'
 
-        # directions buffer is a tensor containing all directions that span the subspace
+        self.subspace_vec_backlog: List[torch.Tensor] = None
+        self.subspace_vec_queue: Deque[torch.Tensor] = None
+        if self.buffer_mode == 'none':
+            pass
+        elif self.buffer_mode == 'backlog':
+            self.subspace_vec_backlog = deque()
+        elif self.buffer_mode == 'queue':
+            self.subspace_vec_queue = deque(maxlen=self.buffer_size)
+
+        #* base model
+        self._base_model_vec: torch.Tensor = None
+        if self.optim_model_vec_mode == 'basediff' or self.subspace_vecs_mode == 'basediff':
+            # parameters_to_vector and .detach() return a tensor that shares the same memory, hence self._base_model_vec is only a reference
+            self._base_model_vec = nn.utils.parameters_to_vector(init_model.parameters()).detach()
+
+        #  subspace_vecs is a tensor containing all (direction) vectors that span the subspace
         # it has shape: buffer_size x n_params of the model
         self._subspace_vecs = torch.tensor([], device=self._device)
         # We use a deque here as we want to compute the difference to the PREVIOUS step.
-        self._model_params_queue = None
+        self._model_params_queue: Deque[torch.Tensor] = None
         if self.track_last_n_model_steps > 0:
             self._model_params_queue = deque(maxlen=self.track_last_n_model_steps)
             self._model_params_queue.append(nn.utils.parameters_to_vector(init_model.parameters()).detach())
@@ -160,27 +180,24 @@ class EffectiveRankRegularization(Regularizer):
     def init_subspace_vecs(self, path_to_buffer_or_runs: str = '', random_buffer: bool = False) -> None:
         if random_buffer:
             n_model_params = self._model_params_queue[0].shape[0]
-            directions_buffer = torch.normal(mean=0,
-                                             std=1,
-                                             size=(self.buffer_size, n_model_params),
-                                             device=self._device)
+            subspace_vecs = torch.normal(mean=0, std=1, size=(self.buffer_size, n_model_params), device=self._device)
         else:
             assert path_to_buffer_or_runs
             load_path = Path(path_to_buffer_or_runs)
             if load_path.is_dir():
-                directions_buffer = load_directions_matrix_from_task_sweep(
+                subspace_vecs = load_directions_matrix_from_task_sweep(
                     load_path,
                     num_runs=self.buffer_size,
                     device=self._device,
                     use_absolute_model_params=self._use_abs_model_params)
                 LOGGER.info(
-                    f'Loaded erank directions from run dir {path_to_buffer_or_runs} (shape {directions_buffer.shape}).')
+                    f'Loaded erank directions from run dir {path_to_buffer_or_runs} (shape {subspace_vecs.shape}).')
             else:
                 raise NotImplementedError('Loading file not supported.')
 
-        assert directions_buffer.shape[
-            0] == self.buffer_size, f'Specified buffer size is {self.buffer_size}, but given directions_buffer as shape {directions_buffer.shape}.'
-        self._subspace_vecs = directions_buffer
+        assert subspace_vecs.shape[
+            0] == self.buffer_size, f'Specified buffer size is {self.buffer_size}, but given directions_buffer as shape {subspace_vecs.shape}.'
+        self._subspace_vecs = subspace_vecs
 
     def update_model_params_queue(self, model: nn.Module) -> None:
         """Updates the model params queue with the parameters in the given model.
@@ -188,17 +205,51 @@ class EffectiveRankRegularization(Regularizer):
         if not self._model_params_queue is None:
             self._model_params_queue.append(nn.utils.parameters_to_vector(model.parameters()).detach())
 
-    def update_subspace_vecs(self,):  # TODO
-        pass
-
-    def reset_subspace_vecs(self,):  # TODO
-        pass
-
-    def set_base_model(self,):  # TODO
-        pass
-    """Returns the difference between the model parameter vectors in the delta_start_params_queue.
-        This corresponds to the optimizer step length, if the queue is updated after every optimizer step.
+    def add_subspace_vec(self, model: nn.Module, clone: bool = False) -> None:
+        """Depending on `buffer_mode` this method adds a subspace vector to the buffer.
+        `buffer_mode`='backlog': Add a new model vector to `subspace_vec_backlog`. If backlog buffer is full, 
+                                 buffer content is moved to `_subspace_vecs` and buffer is cleared.
+        `buffer_mode`='queue': Add a new model vector to `subspace_vec_queue`
+        TODO check if tensors must be moved to cpu memory
+        Args:
+            model (nn.Module): The model to add.
+            clone (bool, optional): If true, copies the model parameters. Defaults to False.
         """
+        model_vec = nn.utils.parameters_to_vector(model.parameters()).detach()
+        if clone:
+            model_vec = model_vec.clone()
+        
+        if self.buffer_mode == 'backlog':
+            assert not self.subspace_vec_backlog is None
+            self.subspace_vec_backlog.append(model_vec)
+            if len(self.subspace_vec_backlog) >= self.buffer_size:
+                # move vectors in backlog to _subspace_vecs
+                # TODO from here: use torch.stack() or torch.tensor()? check also device!
+                # self._subspace_vecs = torch.tensor()
+                self.subspace_vec_backlog.clear()
+
+        elif self.buffer_mode == 'queue':
+            assert not self.subspace_vec_queue is None
+            pass
+        else:
+            raise ValueError(f'Behavior not specified for buffer mode: {self.buffer_mode}')
+
+
+    # def reset_subspace_vecs(self) -> None: # unused
+    #     pass
+
+    def set_base_model(self, model: nn.Module, clone: bool = False) -> None:
+        """Resets the internal base model vector, which is used to construct directions.
+
+        Args:
+            model (nn.Module): The model.
+            clone (bool, optional): Make a copy of the parameters. Defaults to False.
+        """
+        model_vec = nn.utils.parameters_to_vector(model.parameters()).detach()
+        if clone:
+            self._base_model_vec = model_vec.clone()
+        else:
+            self._base_model_vec = model_vec
 
     def get_model_update_step_norm(self, steps_before: int = 1, ord: int = 2) -> float:
         """Returns the norm of the update step. The update step is the difference between the last model and the model at `steps_before` 

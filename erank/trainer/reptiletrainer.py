@@ -1,7 +1,7 @@
 import logging
 import sys
 import copy
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Deque
 import torch
 import pandas as pd
 import torchmetrics
@@ -99,6 +99,9 @@ class ReptileTrainer(ErankBaseTrainer):
             # eval on query set with inner-loop optimized model
             log_losses_inner_eval, query_preds = self._inner_loop_eval(inner_model, query_set)
 
+            #? ERANK: add to buffer
+
+
             #! meta-model gradient update
             # after inner-loop optimization: accumulate gradients in self._model.grad / meta_model
             # calculate meta-gradient: meta_model - task_model | paramters(self._model) - parameters(inner_model) | g = phi - phi_i
@@ -122,6 +125,9 @@ class ReptileTrainer(ErankBaseTrainer):
         self._optimizer.step()
         self._optimizer.zero_grad()
         self._train_step += 1
+
+        #? ERANK: sets a reference to base model
+        self._erank_regularizer.set_base_model(self._model, deepcopy=False)
 
         # log epoch
         self.__log_train_epoch(epoch, losses_inner_learning, losses_inner_eval)
