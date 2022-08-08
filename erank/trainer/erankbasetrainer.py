@@ -73,7 +73,8 @@ class ErankBaseTrainer(BaseTrainer):
 
         self._erank_regularizer = self._create_erank_regularizer(self._model)
         self._loss = RegularizedLoss(loss_module)
-        self._loss.add_regularizer(self._erank_regularizer)
+        if self._erank_regularizer:
+            self._loss.add_regularizer(self._erank_regularizer)
 
     def _create_erank_regularizer(self, model: nn.Module) -> EffectiveRankRegularization:
         # TODO refactor

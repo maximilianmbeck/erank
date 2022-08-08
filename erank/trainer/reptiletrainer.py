@@ -208,7 +208,7 @@ class ReptileTrainer(ErankBaseTrainer):
             metric_vals = self._train_metrics(yq_pred, yq)
         # metrics & logging
         losses_inner_eval = dict()
-        losses_inner_eval['loss'] = meta_loss.item() # TODO refactor: extract information from loss_dict
+        losses_inner_eval.update(convert_dict_to_python_types(loss_dict))
         # put train metrics into log dict
         losses_inner_eval.update(convert_dict_to_python_types(metric_vals))
         return losses_inner_eval, yq_pred.detach().cpu()
@@ -316,7 +316,7 @@ class ReptileTrainer(ErankBaseTrainer):
             losses_inner_eval_before[task_name] = task_log[0]  # after 0 steps
             losses_inner_eval_after[task_name] = task_log[self._n_inner_iter]
 
-        # EVAL: prefix 'query{LOG_SEP_SYMBOL}': losses_inner_eval
+        #! EVAL: prefix 'query{LOG_SEP_SYMBOL}': losses_inner_eval
         losses_eval_before_df = pd.DataFrame(losses_inner_eval_before).transpose().add_suffix(f'{LOG_SEP_SYMBOL}before')
         losses_eval_after_df = pd.DataFrame(losses_inner_eval_after).transpose().add_suffix(f'{LOG_SEP_SYMBOL}after')
         # this is a table containing all tasks as rows and the metrics as columns
@@ -331,7 +331,7 @@ class ReptileTrainer(ErankBaseTrainer):
         log_dict_losses_eval: Dict[str, float] = pd.concat([losses_eval_taskmean_df, losses_eval_taskmedian_df],
                                                            axis=0).to_dict()
 
-        # LEARNING: prefix 'support{LOG_SEP_SYMBOL}': losses_inner_learning
+        #! LEARNING: prefix 'support{LOG_SEP_SYMBOL}': losses_inner_learning
         processed_losses_inner_learning = self.__process_log_inner_learning(losses_inner_learning)
         log_dict_losses_inner_learning: Dict[str, Dict[str, float]] = pd.DataFrame(
             processed_losses_inner_learning).transpose().mean().add_prefix(f'support{LOG_SEP_SYMBOL}').add_suffix(
