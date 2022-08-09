@@ -18,14 +18,16 @@ class Regularizer(nn.Module, ABC):
 
     Args:
         name (str): The name. Will be shown in the run logs.
-        loss_coefficient (float): The loss coefficient. 
+        loss_coefficient (float): The (initial) loss coefficient. 
             Multiplier for the regularization term in the loss function.
+        loss_coefficient_learnable (bool): If the loss_coefficient is learnable. Defaults to False.
     """
 
-    def __init__(self, name: str, loss_coefficient: float):
+    def __init__(self, name: str, loss_coefficient: float, loss_coefficient_learnable: bool = False):
         super().__init__()
         self._name = name
-        self._loss_coefficient = loss_coefficient
+        self._loss_coefficient_learnable = loss_coefficient_learnable
+        self._loss_coefficient = nn.Parameter(torch.tensor(loss_coefficient), requires_grad=loss_coefficient_learnable)
 
     @abstractmethod
     def forward(self, model: nn.Module) -> torch.Tensor:
@@ -36,8 +38,8 @@ class Regularizer(nn.Module, ABC):
         return self._name
 
     @property
-    def loss_coefficient(self) -> float:
-        return self._loss_coefficient
+    def loss_coefficient(self) -> torch.Tensor:
+        return self._loss_coefficient.data
 
 
 class RegularizedLoss(nn.Module):
@@ -45,7 +47,7 @@ class RegularizedLoss(nn.Module):
     def __init__(self, loss: nn.Module):
         super().__init__()
         self.loss_module = loss
-        self._regularizers: Dict[str, Regularizer] = {}
+        self._regularizers: nn.ModuleDict[str, Regularizer] = nn.ModuleDict({})
 
     def forward(self,
                 y_preds: torch.Tensor,
@@ -73,7 +75,7 @@ class RegularizedLoss(nn.Module):
             self._regularizers[regularizer.name] = regularizer
 
     def get_regularizer(self, regularizer_name: str) -> Regularizer:
-        return self._regularizers.get(regularizer_name, None)
+        return self._regularizers[regularizer_name]
 
     def contains_regularizer(self, regularizer_name: str) -> bool:
         return regularizer_name in self._regularizers
@@ -115,11 +117,11 @@ class EffectiveRankRegularization(Regularizer):
                                     - abs: absolute model parameters
                                     - initdiff: difference between initialization and trained model
                                     - basediff: difference of the vectors to add to a specific set of "base parameters"
+        track_last_n_model_steps (int, optional): Keep a copy of the last n parameter vectors. Use `track_last_n_model_steps=2` 
+                                                   if you want to use the update step as `optim_model_vec` or compute the update step length.
         normalize_directions (bool, optional): Normalize all model parameters in the directions matrix M, 
                                                i.e. all row vectors in M are normalized to 1 before computing the erank. 
                                                Defaults to False.
-        track_last_n_model_steps (int, optional): Keep a copy of the last n parameter vectors. Use `track_last_n_model_steps=2` 
-                                                   if you want to use the update step as `optim_model_vec` or compute the update step length.
 
     References:
         .. [#] Roy, Olivier, and Martin Vetterli. "The effective rank: A measure of effective dimensionality."
@@ -132,6 +134,7 @@ class EffectiveRankRegularization(Regularizer):
     def __init__(
             self,
             init_model: nn.Module,
+            device: torch.device,
             loss_coefficient: float,
             buffer_size: int,
             buffer_mode: str,  # none, queue, backlog
@@ -139,15 +142,18 @@ class EffectiveRankRegularization(Regularizer):
             subspace_vecs_mode: str,  # abs, initdiff, basediff
             track_last_n_model_steps: int = 2,
             normalize_dir_matrix_m: bool = False,
+            loss_coefficient_learnable: bool = False,
             name: str = 'erank'):
-        super().__init__(name=name, loss_coefficient=loss_coefficient)
+        super().__init__(name=name,
+                         loss_coefficient=loss_coefficient,
+                         loss_coefficient_learnable=loss_coefficient_learnable)
         self.buffer_size = buffer_size  # number of subspace vectors / directions in the buffer
         self.buffer_mode = buffer_mode
         self.optim_model_vec_mode = optim_model_vec_mode
         self.subspace_vecs_mode = subspace_vecs_mode
         self.track_last_n_model_steps = track_last_n_model_steps
         self.normalize_dir_matrix_m = normalize_dir_matrix_m
-        self._device = next(iter(init_model.parameters())).device
+        self._device = device
         self._n_model_params = len(nn.utils.parameters_to_vector(init_model.parameters()))
 
         assert self.buffer_mode in EffectiveRankRegularization.buffer_modes, f'Unknown buffer mode: {self.buffer_mode}'
@@ -164,18 +170,21 @@ class EffectiveRankRegularization(Regularizer):
         #* init model
         self._init_model: torch.Tensor = None
         if self.subspace_vecs_mode == 'initdiff':
-            self._init_model = nn.utils.parameters_to_vector(init_model.parameters()).detach()
+            # use nn.Paramater such, that _init_model is properly registered in Module (e.g. for .to() call)
+            self._init_model = nn.Parameter(nn.utils.parameters_to_vector(init_model.parameters()).detach(),
+                                            requires_grad=False)
 
         #* base model
         self._base_model_vec: torch.Tensor = None
         if self.optim_model_vec_mode == 'basediff' or self.subspace_vecs_mode == 'basediff':
             # parameters_to_vector and .detach() return a tensor that shares the same memory, hence self._base_model_vec is only a reference
-            self._base_model_vec = nn.utils.parameters_to_vector(init_model.parameters()).detach()
+            self._base_model_vec = nn.Parameter(nn.utils.parameters_to_vector(init_model.parameters()).detach(),
+                                                requires_grad=False)
 
         #* subspace vecs
         # subspace_vecs is a tensor containing all (direction) vectors that span the subspace
         # it has shape: buffer_size x n_params of the model
-        self._subspace_vecs = torch.tensor([], device=self._device)
+        self._subspace_vecs = nn.Parameter(torch.tensor([], device=self._device), requires_grad=False)
 
         #* param queue
         # We use a deque here as we want to compute the difference to the PREVIOUS step.
@@ -207,7 +216,7 @@ class EffectiveRankRegularization(Regularizer):
 
         assert subspace_vecs.shape[
             0] == self.buffer_size, f'Specified buffer size is {self.buffer_size}, but given directions_buffer as shape {subspace_vecs.shape}.'
-        self._subspace_vecs = subspace_vecs
+        self._subspace_vecs.data = subspace_vecs
 
     def _update_model_params_queue(self, model: nn.Module) -> None:
         """Updates the model params queue with the parameters in the given model.
@@ -246,9 +255,9 @@ class EffectiveRankRegularization(Regularizer):
         if self.buffer_mode == 'backlog':
             if len(self.subspace_vec_buffer) >= self.buffer_size:
                 # move vectors in backlog to _subspace_vecs
-                LOGGER.info('here.')
-                # TODO from here: use torch.stack() or torch.tensor()? check also device!
-                # self._subspace_vecs = torch.tensor()
+                subspace_vecs = torch.stack(list(self.subspace_vec_buffer))
+                assert subspace_vecs.device == self._subspace_vecs.device and subspace_vecs.shape == self._subspace_vecs.shape
+                self._subspace_vecs.data = subspace_vec
                 self.subspace_vec_buffer.clear()
 
     def set_base_model(self, model: nn.Module) -> None:
@@ -259,7 +268,9 @@ class EffectiveRankRegularization(Regularizer):
         """
         with torch.no_grad():
             # this makes a copy of the model parameters.
-            self._base_model_vec = nn.utils.parameters_to_vector(model.parameters())
+            model_vec = nn.utils.parameters_to_vector(model.parameters())
+            assert self._base_model_vec.device == model_vec.device
+            self._base_model_vec.data = model_vec
 
     def get_model_update_step_norm(self, steps_before: int = 1, ord: int = 2) -> float:
         """Returns the norm of the update step. The update step is the difference between the last model and the model at `steps_before` 
@@ -323,6 +334,16 @@ class EffectiveRankRegularization(Regularizer):
         Returns:
             torch.Tensor: Effective Rank regularization term.
         """
+        if self.buffer_mode == 'backlog':
+            if self._subspace_vecs.shape[0] < self.buffer_size:
+                return torch.tensor(0.0, dtype=torch.float32, device=self._device)
+        elif self.buffer_mode == 'queue':
+            if len(self.subspace_vec_buffer) < self.buffer_size:
+                return torch.tensor(0.0, dtype=torch.float32, device=self._device)
+            else:
+                # create subspace vecs from buffer
+                self._subspace_vecs = torch.tensor(self.subspace_vec_buffer, dtype=torch.float32, device=self._device)
+
         # TODO from here: buffer not full yet handle this case return torch tensor = 0
         # TODO handle the case when subspace_vecs are empty -> then no erank is applied -> log this as info
 
