@@ -11,6 +11,7 @@ from ml_utilities.torch_models import get_model_class
 from ml_utilities.torch_utils import get_loss
 from ml_utilities.trainers.basetrainer import BaseTrainer
 from ml_utilities.torch_utils.factory import create_optimizer_and_scheduler
+from ml_utilities.torch_utils.metrics import get_metric_collection
 from hydra.core.hydra_config import HydraConfig
 from erank.regularization import EffectiveRankRegularization, RegularizedLoss
 
@@ -97,6 +98,13 @@ class ErankBaseTrainer(BaseTrainer):
         else:
             raise ValueError(f'Unknown erank type: {erank_cfg.type}')
         return erank_reg
+
+    def _create_metrics(self) -> None:
+        LOGGER.info('Creating metrics.')
+        metric_names = self.config.trainer.metrics
+        metrics = get_metric_collection(metric_names=metric_names)
+        self._train_metrics = metrics.clone()  # prefix='train_'
+        self._val_metrics = metrics.clone()  # prefix='val_'
 
     def _finish_train_epoch(self,
                             epoch: int,

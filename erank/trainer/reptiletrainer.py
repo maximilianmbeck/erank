@@ -71,12 +71,6 @@ class ReptileTrainer(ErankBaseTrainer):
         # does nothing, for compatibility reasons
         self._loaders = {}
 
-    def _create_metrics(self) -> None:
-        LOGGER.info('Creating metrics.')
-        metrics = torchmetrics.MetricCollection([torchmetrics.MeanSquaredError()])  # TODO make generic and configurable
-        self._train_metrics = metrics.clone()  # prefix='train_'
-        self._val_metrics = metrics.clone()  # prefix='val_'
-
     def _train_epoch(self, epoch: int) -> None:
         # setup logging
         losses_inner_learning, losses_inner_eval = {}, {}
@@ -87,7 +81,7 @@ class ReptileTrainer(ErankBaseTrainer):
         # parallel version of Reptile (iterate over a batch of tasks)
         task_batch = self._datasets['train'].sample_tasks(self._task_batch_size)
         # pbar = tqdm(task_batch, desc=f'Train epoch {epoch}', file=sys.stdout) # don't use tqdm for performance reasons
-        for task in task_batch:
+        for task_idx, task in enumerate(task_batch):
             # sample support and query set
             support_set, query_set = task.support_set, task.query_set
 
@@ -183,15 +177,19 @@ class ReptileTrainer(ErankBaseTrainer):
             ys_pred = inner_model(xs)
             if mode == 'train':
                 loss, loss_dict = self._loss(ys_pred, ys, inner_model)  # use regularization
+                self._inner_train_step += 1
             elif mode == 'val':
                 loss, loss_dict = self._loss(ys_pred, ys)  # no regularization
             else:
                 raise ValueError(f'Unsupported inner-loop learning mode: `{mode}`')
+            
+            if torch.isnan(loss):
+                raise RuntimeError(f'Loss NaN in inner iteration {i} of epoch {self._epoch}.')
+
             # backward pass
             inner_optimizer.zero_grad()
             loss.backward()
             inner_optimizer.step()
-            self._inner_train_step += 1
 
             # eval during fine-tuning
             do_eval_after_step(i)
@@ -273,7 +271,7 @@ class ReptileTrainer(ErankBaseTrainer):
             f'query{LOG_SEP_SYMBOL}').add_suffix(f'{LOG_SEP_SYMBOL}taskmean').to_dict()
         # prefix 'support{LOG_SEP_SYMBOL}': losses_inner_learning
         losses_inner_learning = self.__process_log_inner_learning(losses_inner_learning)
-        losses_inner_learning = pd.DataFrame(losses_inner_learning).mean().add_prefix(
+        losses_inner_learning = pd.DataFrame(losses_inner_learning).transpose().mean().add_prefix(
             f'support{LOG_SEP_SYMBOL}').add_suffix(f'{LOG_SEP_SYMBOL}taskmean').to_dict()
         losses_epoch = dict(inner_train_step=self._inner_train_step, **losses_inner_eval, **losses_inner_learning)
         self._finish_train_epoch(epoch, losses_epoch)
