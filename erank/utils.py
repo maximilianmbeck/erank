@@ -11,9 +11,9 @@ from tqdm import tqdm
 LOGGER = logging.getLogger(__name__)
 
 
-def load_model_from_epoch(
-        run_path: Union[str, Path],
-        epoch: int, device: Union[torch.device, str, int] = "auto") -> BaseModel:
+def load_model_from_epoch(run_path: Union[str, Path],
+                          epoch: int,
+                          device: Union[torch.device, str, int] = "auto") -> BaseModel:
     if isinstance(run_path, str):
         run_path = Path(run_path)
     # load config
@@ -40,16 +40,17 @@ def load_best_model(run_path: Union[str, Path], device: Union[torch.device, str,
     return model
 
 
-def load_directions_matrix_from_task_sweep(
-        path_to_runs: Union[str, Path], num_runs: int = -1,
-        device: Union[torch.device, str, int] = "auto", use_absolute_model_params: bool = False) -> torch.Tensor:
+def load_directions_matrix_from_task_sweep(path_to_runs: Union[str, Path],
+                                           num_runs: int = -1,
+                                           device: Union[torch.device, str, int] = "auto",
+                                           use_absolute_model_params: bool = False) -> torch.Tensor:
     """Load parameter matrix, where ´num_runs´ models are stacked. 
 
     Args:
         path_to_runs (Union[str, Path]): Path to the runs. 
         num_runs (int, optional): Number of runs to stack. If num_runs = -1, use all runs. Defaults to -1.
         device (Union[torch.device, str, int], optional): The device. Defaults to "auto".
-        use_absolute_model_params (bool, optional): Whether to use the absolute models 
+        use_absolute_model_params (bool, optional): Whether to use the absolute parameters of the best models 
                 or the difference between the best model and its initialization. Defaults to False.
 
     Returns:

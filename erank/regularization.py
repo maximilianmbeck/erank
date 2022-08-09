@@ -55,6 +55,8 @@ class RegularizedLoss(nn.Module):
                 model: nn.Module = None) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         loss_dict = {}
         loss = self.loss_module(y_preds, y_labels)
+        if torch.isinf(loss):
+            LOGGER.warning(f'{LOG_LOSS_PREFIX}_{self.loss_module.__class__.__name__} is infinite!')
         loss_dict[f'{LOG_LOSS_PREFIX}_{self.loss_module.__class__.__name__}'] = loss
         loss_total = loss
         if not model is None:
@@ -71,7 +73,7 @@ class RegularizedLoss(nn.Module):
         if regularizer.name in self._regularizers.keys():
             raise ValueError(f'Regularizer {regularizer.name} already exists in RegularizedLoss.')
         else:
-            LOGGER.info(f'Adding regularizer `{regularizer.name}` to RegularizdLoss')
+            LOGGER.info(f'Adding regularizer `{regularizer.name}` to RegularizedLoss')
             self._regularizers[regularizer.name] = regularizer
 
     def get_regularizer(self, regularizer_name: str) -> Regularizer:
@@ -198,8 +200,7 @@ class EffectiveRankRegularization(Regularizer):
 
     def init_subspace_vecs(self, path_to_buffer_or_runs: str = '', random_buffer: bool = False) -> None:
         if random_buffer:
-            n_model_params = self._model_params_queue[0].shape[0]
-            subspace_vecs = torch.normal(mean=0, std=1, size=(self.buffer_size, n_model_params), device=self._device)
+            subspace_vecs = torch.normal(mean=0, std=1, size=(self.buffer_size, self._n_model_params), device=self._device)
         else:
             assert path_to_buffer_or_runs
             load_path = Path(path_to_buffer_or_runs)
@@ -208,7 +209,7 @@ class EffectiveRankRegularization(Regularizer):
                     load_path,
                     num_runs=self.buffer_size,
                     device=self._device,
-                    use_absolute_model_params=self._use_abs_model_params)
+                    use_absolute_model_params=False) # TODO make configurable
                 LOGGER.info(
                     f'Loaded erank directions from run dir {path_to_buffer_or_runs} (shape {subspace_vecs.shape}).')
             else:
@@ -234,7 +235,9 @@ class EffectiveRankRegularization(Regularizer):
         Args:
             model (nn.Module): The model to add.
         """
-        if self.buffer_mode in ['backlog', 'queue']:
+        if self.buffer_mode == 'none':
+            return
+        elif self.buffer_mode in ['backlog', 'queue']:
             assert not self.subspace_vec_buffer is None
         else:
             raise ValueError(f'Behavior not specified for buffer mode: {self.buffer_mode}')
@@ -315,11 +318,10 @@ class EffectiveRankRegularization(Regularizer):
         # compute model vector for optimization
         model_vec = nn.utils.parameters_to_vector(model.parameters())  # not detached!
 
-        # if torch.isnan(model_vec).any():
-        #     raise RuntimeError('Model parameter vector contains NaNs, before constructing the directions matrix M.')
-        
-        if torch.isinf(model_vec).any():
-            raise RuntimeError('Model parameter vector contains infinite values, this will likely cause NaNs.')
+        if torch.isinf(model_vec).any() or torch.isnan(model_vec).any():
+            LOGGER.warning(
+                f'Model parameter vector of size {len(model_vec)} contains {torch.isinf(model_vec).sum()} infinite and {torch.isnan(model_vec).sum()} NaN values.'
+            )
 
         if optim_model_vec_mode == 'abs':
             optim_model_vec = model_vec
