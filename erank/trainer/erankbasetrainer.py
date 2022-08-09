@@ -77,22 +77,23 @@ class ErankBaseTrainer(BaseTrainer):
             self._loss.add_regularizer(self._erank_regularizer)
 
     def _create_erank_regularizer(self, model: nn.Module) -> EffectiveRankRegularization:
-        # TODO refactor
         erank_cfg = self.config.trainer.get('erank', None)
         erank_reg = None
         if erank_cfg is None or erank_cfg.type == 'none':
             LOGGER.info('No erank regularizer.')
-        elif erank_cfg.type in ['random', 'weightsdiff']:
+        elif erank_cfg.type in ['random', 'weightsdiff', 'buffer']:
             LOGGER.info(f'Erank regularization of type {erank_cfg.type}.')
-            erank_reg = EffectiveRankRegularization(buffer_size=erank_cfg.buffer_size,
-                                                    init_model=model,
-                                                    loss_coefficient=erank_cfg.loss_coefficient,
-                                                    normalize_dir_matrix_m=erank_cfg.get('norm_directions', False),
-                                                    use_abs_model_params=erank_cfg.get('use_abs_model_params', True))
+            erank_kwargs = erank_cfg.erank_kwargs
+            erank_reg = EffectiveRankRegularization(init_model=model, device=self.device, **erank_kwargs)
             if erank_cfg.type == 'random':
-                erank_reg.init_directions_buffer(random_buffer=True)
+                erank_reg.init_subspace_vecs(random_buffer=True)
             elif erank_cfg.type == 'weightsdiff':
-                erank_reg.init_directions_buffer(path_to_buffer_or_runs=erank_cfg.dir_buffer)
+                dir_buffer_path = erank_cfg.get('dir_buffer', None)
+                if dir_buffer_path is None:
+                    raise ValueError(f'Erank type is `weightsdiff`, but no buffer path is given!')
+                erank_reg.init_subspace_vecs(path_to_buffer_or_runs=dir_buffer_path)
+            elif erank_cfg.type == 'buffer':
+                pass # does nothing, buffer is filled during training
         else:
             raise ValueError(f'Unknown erank type: {erank_cfg.type}')
         return erank_reg
