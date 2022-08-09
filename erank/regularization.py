@@ -243,6 +243,9 @@ class EffectiveRankRegularization(Regularizer):
         with torch.no_grad():
             model_vec = nn.utils.parameters_to_vector(model.parameters())
 
+        # if torch.isnan(model_vec).any():
+        #     raise RuntimeError('Model parameter vector contains NaNs.')
+
         if self.subspace_vecs_mode == 'abs':
             subspace_vec = model_vec
         elif self.subspace_vecs_mode == 'initdiff':
@@ -255,10 +258,17 @@ class EffectiveRankRegularization(Regularizer):
         if self.buffer_mode == 'backlog':
             if len(self.subspace_vec_buffer) >= self.buffer_size:
                 # move vectors in backlog to _subspace_vecs
-                subspace_vecs = torch.stack(list(self.subspace_vec_buffer))
-                assert subspace_vecs.device == self._subspace_vecs.device and subspace_vecs.shape == self._subspace_vecs.shape
-                self._subspace_vecs.data = subspace_vec
+                self._subspace_vecs.data = self._create_subspace_vecs_from_buffer(self.subspace_vec_buffer)
                 self.subspace_vec_buffer.clear()
+
+    def _create_subspace_vecs_from_buffer(self, subspace_vec_buffer: Deque[torch.Tensor]) -> torch.Tensor:
+        new_subspace_vecs = torch.stack(list(subspace_vec_buffer))
+        assert new_subspace_vecs.device == self._subspace_vecs.device
+        if self._subspace_vecs.shape != (0,) and new_subspace_vecs.shape != self._subspace_vecs.shape:
+            raise ValueError(
+                f'Wrong shape of new subspace vectors! Previous shape: {self._subspace_vecs.shape}, New (wrong) shape: {new_subspace_vecs.shape}'
+            )
+        return new_subspace_vecs
 
     def set_base_model(self, model: nn.Module) -> None:
         """Resets the internal base model vector, which is used to construct directions.
@@ -302,8 +312,14 @@ class EffectiveRankRegularization(Regularizer):
                                        normalize_matrix: bool) -> torch.Tensor:
         """Constructs the directions matrix M (which is used to calculate the erank). 
         Each row contains the parameters of a (pretrained) model flattened as a vector."""
-        # compute model vector to optimize
+        # compute model vector for optimization
         model_vec = nn.utils.parameters_to_vector(model.parameters())  # not detached!
+
+        # if torch.isnan(model_vec).any():
+        #     raise RuntimeError('Model parameter vector contains NaNs, before constructing the directions matrix M.')
+        
+        if torch.isinf(model_vec).any():
+            raise RuntimeError('Model parameter vector contains infinite values, this will likely cause NaNs.')
 
         if optim_model_vec_mode == 'abs':
             optim_model_vec = model_vec
@@ -316,9 +332,9 @@ class EffectiveRankRegularization(Regularizer):
 
         # update subspace vecs
         if self.buffer_mode == 'queue':
-            LOGGER.info('here.')
-            # self._subspace_vecs = ...
+            self._subspace_vecs.data = self._create_subspace_vecs_from_buffer(self.subspace_vec_buffer)
 
+        assert self._subspace_vecs.shape[0] == self.buffer_size
         directions_matrix = torch.cat([optim_model_vec.unsqueeze(dim=0), self._subspace_vecs],
                                       dim=0)  # shape: (n_directions, n_model_parameters)
         if normalize_matrix:
@@ -340,16 +356,9 @@ class EffectiveRankRegularization(Regularizer):
         elif self.buffer_mode == 'queue':
             if len(self.subspace_vec_buffer) < self.buffer_size:
                 return torch.tensor(0.0, dtype=torch.float32, device=self._device)
-            else:
-                # create subspace vecs from buffer
-                self._subspace_vecs = torch.tensor(self.subspace_vec_buffer, dtype=torch.float32, device=self._device)
 
-        # TODO from here: buffer not full yet handle this case return torch tensor = 0
-        # TODO handle the case when subspace_vecs are empty -> then no erank is applied -> log this as info
-
-        assert self._subspace_vecs.shape[0] == self.buffer_size
         self._update_model_params_queue(model)
-        directions_matrix = self._construct_directions_matrix_m(model, self._use_abs_model_params,
+        directions_matrix = self._construct_directions_matrix_m(model, self.optim_model_vec_mode,
                                                                 self.normalize_dir_matrix_m)
         return EffectiveRankRegularization.erank(directions_matrix)
 
