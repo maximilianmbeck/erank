@@ -359,7 +359,8 @@ class ReptileTrainer(ErankBaseTrainer):
                                  epoch=epoch,
                                  metrics_epoch=losses_inner_plot_log,
                                  log_to_console=False)
-        val_score = losses_eval_after_df.mean()['loss-after']  # TODO make configurable
+        val_score_metric_name = list(self._val_metrics.keys())[0] # the first metric in val_metrics
+        val_score = losses_eval_after_df.mean()[f'{val_score_metric_name}{LOG_SEP_SYMBOL}after']
         self._reset_metrics()
         return val_score
 
