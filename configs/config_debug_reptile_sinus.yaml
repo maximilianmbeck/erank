@@ -2,7 +2,9 @@ defaults:
   - hydra: jobname_outputdir_format
   - _self_
 #######
-
+hydra:
+  verbose: ${config.trainer.verbose}
+#######
 run_config: 
   exec_type: parallel # sequential
   hostname: dragonfly
@@ -97,16 +99,17 @@ config:
       type: buffer #weightsdiff #none #random #buffer
       dir_buffer: null
       erank_kwargs:
-        loss_coefficient: 0.001 #1.0 #XXX
+        loss_coefficient: 0.0 #0.01 #1.0 #XXX
         buffer_size: 10 # number of directions stored in the buffer
         buffer_mode: backlog # none, backlog, queue
-        optim_model_vec_mode: abs #basediff # abs, stepdiff, basediff
+        optim_model_vec_mode: basediff #abs #basediff # abs, stepdiff, basediff
         subspace_vecs_mode: basediff #abs #basediff # abs, initdiff, basediff
         track_last_n_model_steps: 0
         normalize_dir_matrix_m: False
     metrics:
       - MeanSquaredError
     num_workers: 4
+    verbose: True
 
   data: 
     metadataset: sinus
@@ -122,7 +125,7 @@ config:
     val_metadataset_kwargs:
       support_size: 10
       query_size: 50
-      num_tasks: 100 #1000
+      num_tasks: 10 #100 #1000
       amplitude_range: [0.1, 5.0]
       phase_range: [0, 6.283185307]
       x_range: [-5, 5]

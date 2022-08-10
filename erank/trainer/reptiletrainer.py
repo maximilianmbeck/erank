@@ -17,6 +17,7 @@ from erank.regularization import LOG_LOSS_TOTAL_KEY
 from erank.trainer.erankbasetrainer import ErankBaseTrainer
 from ml_utilities.utils import convert_dict_to_python_types, convert_listofdicts_to_dictoflists
 from ml_utilities.torch_utils.factory import create_optimizer_and_scheduler
+from ml_utilities.torch_utils import compute_grad_norm, compute_weight_norm
 
 LOGGER = logging.getLogger(__name__)
 
@@ -41,6 +42,7 @@ class ReptileTrainer(ErankBaseTrainer):
         self._n_inner_iter = self.config.trainer.n_inner_iter
         self._val_pred_plots_for_tasks = self.config.trainer.val_pred_plots_for_tasks
         self._log_plot_inner_learning_curves = self.config.trainer.get('log_plot_inner_learning_curves', False)
+        self._verbose = self.config.trainer.get('verbose', False)
 
         self._inner_eval_after_steps = self.config.trainer.get('inner_eval_after_steps', None)
         if self._inner_eval_after_steps is None:
@@ -72,8 +74,9 @@ class ReptileTrainer(ErankBaseTrainer):
         self._loaders = {}
 
     def _train_epoch(self, epoch: int) -> None:
+        LOGGER.debug(f'--Train epoch: {epoch}')
         # setup logging
-        losses_inner_learning, losses_inner_eval = {}, {}
+        losses_inner_learning, losses_inner_eval, epoch_stats = {}, {}, {}
 
         # zero grad of model, since the task updates/gradients will be accumulated there
         self._model.zero_grad()
@@ -82,6 +85,7 @@ class ReptileTrainer(ErankBaseTrainer):
         task_batch = self._datasets['train'].sample_tasks(self._task_batch_size)
         # pbar = tqdm(task_batch, desc=f'Train epoch {epoch}', file=sys.stdout) # don't use tqdm for performance reasons
         for task_idx, task in enumerate(task_batch):
+            LOGGER.debug(f'----Task idx: {task_idx}')
             # sample support and query set
             support_set, query_set = task.support_set, task.query_set
 
@@ -92,6 +96,9 @@ class ReptileTrainer(ErankBaseTrainer):
 
             # eval on query set with inner-loop optimized model
             log_losses_inner_eval, query_preds = self._inner_loop_eval(inner_model, query_set)
+            LOGGER.debug(
+                f'Train inner eval losses: \n{pd.Series(convert_dict_to_python_types(log_losses_inner_eval), dtype=float)}'
+            )
 
             #! meta-model gradient update
             # after inner-loop optimization: accumulate gradients in self._model.grad / meta_model
@@ -107,13 +114,15 @@ class ReptileTrainer(ErankBaseTrainer):
 
             #? ERANK: add to buffer
             if self._erank_regularizer:
-                self._erank_regularizer.add_subspace_vec(inner_model)
+                subspace_vec_norm = self._erank_regularizer.add_subspace_vec(inner_model)
+                log_losses_inner_eval.update({'param_subspace_vec_norm': subspace_vec_norm})
 
             # track all logs
             losses_inner_learning[task.name] = log_losses_inner_learning
             losses_inner_eval[task.name] = log_losses_inner_eval
 
         #! meta-model gradient step
+        # TODO from here log to epoch stats
         # TODO log outer grad norm -> write a grad norm method in ml_utilities
         # outer loop step / update meta-parameters
         self._optimizer.step()
@@ -125,7 +134,7 @@ class ReptileTrainer(ErankBaseTrainer):
             self._erank_regularizer.set_base_model(self._model)
 
         # log epoch
-        self.__log_train_epoch(epoch, losses_inner_learning, losses_inner_eval)
+        self.__log_train_epoch(epoch, losses_inner_learning, losses_inner_eval, epoch_stats)
 
     def _inner_loop_learning(
         self,
@@ -155,9 +164,11 @@ class ReptileTrainer(ErankBaseTrainer):
 
         def do_eval_after_step(step: int):
             if step in eval_after_steps:
-                losses, preds = self._inner_loop_eval(inner_model, query_set)
-                losses_inner_eval[step] = losses
+                loss_metric_dict, preds = self._inner_loop_eval(inner_model, query_set)
+                losses_inner_eval[step] = loss_metric_dict
                 inner_eval_preds[step] = preds
+                LOGGER.debug(
+                    f'Inner eval losses: \n{pd.Series(convert_dict_to_python_types(loss_metric_dict), dtype=float)}')
 
         # log dicts
         losses_inner: List[Dict[str, torch.Tensor]] = []
@@ -172,6 +183,7 @@ class ReptileTrainer(ErankBaseTrainer):
 
         # do inner-loop optimization
         for i in range(self._n_inner_iter):
+            LOGGER.debug(f'------Inner iter: {i}')
             xs, ys = support_query_as_minibatch(support_set, self.device)
             # forward pass
             ys_pred = inner_model(xs)
@@ -188,11 +200,18 @@ class ReptileTrainer(ErankBaseTrainer):
                     f'Loss NaN in inner iteration {i} of epoch {self._epoch}. Single Loss Terms: \n{pd.Series(convert_dict_to_python_types(loss_dict), dtype=float)}'
                 )
 
+            if self._verbose:
+                loss_dict['weight_norm'] = compute_weight_norm(inner_model)
+
             # backward pass
             inner_optimizer.zero_grad()
             loss.backward()
             inner_optimizer.step()
 
+            if self._verbose:
+                loss_dict['grad_norm'] = compute_grad_norm(inner_model)
+                LOGGER.debug(f'Inner losses, weights, grads: \n{pd.Series(convert_dict_to_python_types(loss_dict), dtype=float)}')
+            
             # eval during fine-tuning
             do_eval_after_step(i)
 
@@ -221,14 +240,16 @@ class ReptileTrainer(ErankBaseTrainer):
         return losses_inner_eval, yq_pred.detach().cpu()
 
     def _val_epoch(self, epoch: int, trained_model: nn.Module) -> float:
+        LOGGER.debug(f'--Val epoch: {epoch}')
         # setup logging
         losses_inner_learning, losses_inner_eval = {}, {}
         preds_plot_log = {}
 
         # get eval tasks
         eval_tasks = self._datasets['val'].get_tasks()
-        pbar = tqdm(eval_tasks, desc=f'Val epoch {epoch}', file=sys.stdout)
-        for i, task in enumerate(pbar):
+        # pbar = tqdm(eval_tasks, desc=f'Val epoch {epoch}', file=sys.stdout)
+        for task_idx, task in enumerate(eval_tasks):
+            LOGGER.debug(f'----Task idx: {task_idx}')
             # sample support and query set
             support_set, query_set = task.support_set, task.query_set
 
@@ -244,7 +265,7 @@ class ReptileTrainer(ErankBaseTrainer):
             losses_inner_learning[task.name] = log_losses_inner_learning
 
             # make plot of predictions
-            if i < self._val_pred_plots_for_tasks:
+            if task_idx < self._val_pred_plots_for_tasks:
                 fig, fname = task.plot_query_predictions(epoch, eval_predictions)
                 # save fig & log to wandb
                 save_path = self._experiment_dir / SAVEDIR_PRED_PLOT
@@ -260,13 +281,14 @@ class ReptileTrainer(ErankBaseTrainer):
     ###### LOGGING
 
     def __log_train_epoch(self, epoch: int, losses_inner_learning: Dict[str, List[Dict[str, torch.Tensor]]],
-                          losses_inner_eval: Dict[str, Dict[str, float]]) -> None:
+                          losses_inner_eval: Dict[str, Dict[str, float]], epoch_stats: Dict[str, float] = {}) -> None:
         """Log results of a training iteration (epoch).
 
         Args:
             epoch (int): epoch
             losses_inner_learning (Dict[str, Dict[str, List[float]]]): Dict levels: Task->metric/loss->Values at inner steps
             losses_inner_eval (Dict[str, Dict[str, float]]): Dict levels: Task->metric/loss->Value
+            epoch_stats (Dict[str, float]): Any statistics on epoch level. Dict levels: log_name->Value
         """
         # prefix 'query{LOG_SEP_SYMBOL}': losses_inner_eval
         losses_inner_eval = pd.DataFrame(losses_inner_eval).transpose().mean().add_prefix(
@@ -275,7 +297,7 @@ class ReptileTrainer(ErankBaseTrainer):
         losses_inner_learning = self.__process_log_inner_learning(losses_inner_learning)
         losses_inner_learning = pd.DataFrame(losses_inner_learning).transpose().mean().add_prefix(
             f'support{LOG_SEP_SYMBOL}').add_suffix(f'{LOG_SEP_SYMBOL}taskmean').to_dict()
-        losses_epoch = dict(inner_train_step=self._inner_train_step, **losses_inner_eval, **losses_inner_learning)
+        losses_epoch = dict(inner_train_step=self._inner_train_step, **losses_inner_eval, **losses_inner_learning, **epoch_stats)
         self._finish_train_epoch(epoch, losses_epoch)
 
     def __process_log_inner_learning(

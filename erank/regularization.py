@@ -236,14 +236,19 @@ class EffectiveRankRegularization(Regularizer):
             with torch.no_grad():
                 self._model_params_queue.append(nn.utils.parameters_to_vector(model.parameters()))
 
-    def add_subspace_vec(self, model: nn.Module) -> None:
+    def add_subspace_vec(self, model: nn.Module, ord: int=2) -> float:
         """Depending on `buffer_mode` this method adds a subspace vector to the buffer.
         `buffer_mode`='backlog': Add a new model vector to `subspace_vec_backlog`. If backlog buffer is full, 
                                  buffer content is moved to `_subspace_vecs` and buffer is cleared.
         `buffer_mode`='queue': Add a new model vector to `subspace_vec_queue`
         TODO check if tensors must be moved to cpu memory
+
         Args:
             model (nn.Module): The model to add.
+            ord (int): Norm type of the subspace vector.
+
+        Returns:
+            float: The norm of the subspace vector. 
         """
         if self.buffer_mode == 'none':
             return
@@ -256,8 +261,10 @@ class EffectiveRankRegularization(Regularizer):
         with torch.no_grad():
             model_vec = nn.utils.parameters_to_vector(model.parameters())
 
-        # if torch.isnan(model_vec).any():
-        #     raise RuntimeError('Model parameter vector contains NaNs.')
+        if torch.isinf(model_vec).any() or torch.isnan(model_vec).any():
+            LOGGER.warning(
+                f'Model parameter vector of size {len(model_vec)} contains {torch.isinf(model_vec).sum()} infinite and {torch.isnan(model_vec).sum()} NaN values.'
+            )
 
         if self.subspace_vecs_mode == 'abs':
             subspace_vec = model_vec
@@ -266,6 +273,9 @@ class EffectiveRankRegularization(Regularizer):
         elif self.subspace_vecs_mode == 'basediff':
             subspace_vec = model_vec - self._base_model_vec
 
+        # norm of subspace_vec
+        subspace_vec_norm = torch.linalg.norm(subspace_vec, dim=0, ord=ord)
+
         # add subspace vector to buffer
         self.subspace_vec_buffer.append(subspace_vec)
         if self.buffer_mode == 'backlog':
@@ -273,6 +283,7 @@ class EffectiveRankRegularization(Regularizer):
                 # move vectors in backlog to _subspace_vecs
                 self._subspace_vecs.data = self._create_subspace_vecs_from_buffer(self.subspace_vec_buffer)
                 self.subspace_vec_buffer.clear()
+        return subspace_vec_norm.item()
 
     def _create_subspace_vecs_from_buffer(self, subspace_vec_buffer: Deque[torch.Tensor]) -> torch.Tensor:
         new_subspace_vecs = torch.stack(list(subspace_vec_buffer))
