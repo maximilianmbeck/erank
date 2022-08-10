@@ -79,13 +79,13 @@ config:
     optimizer_scheduler:
       optimizer_name: sgd #adamw # TODO implement optimizer state sharing between inner loops
       optimizer_kwargs:
-        lr: 0.001
+        lr: 0.001 # default sine: 0.001
         weight_decay: 0.0 #0.001
     init_model: null
     inner_optimizer: 
       optimizer_name: sgd
       optimizer_kwargs:
-        lr: 0.001
+        lr: 0.001 # default sine: 0.01
     n_inner_iter: 30 #3
     val_pred_plots_for_tasks: 1 # Prediction plots for `val_plots` tasks. If int: Uses the first `val_plots` tasks to generate plots
     inner_eval_after_steps: [0, 1, 2, 3, 5, 10, 20, 30, 50] # null: use default, List[int]: list of steps after, which eval is done
@@ -100,8 +100,8 @@ config:
         loss_coefficient: 0.001 #1.0 #XXX
         buffer_size: 10 # number of directions stored in the buffer
         buffer_mode: backlog # none, backlog, queue
-        optim_model_vec_mode: basediff # abs, stepdiff, basediff
-        subspace_vecs_mode: basediff # abs, initdiff, basediff # TODO from here check what happens
+        optim_model_vec_mode: abs #basediff # abs, stepdiff, basediff
+        subspace_vecs_mode: basediff #abs #basediff # abs, initdiff, basediff
         track_last_n_model_steps: 0
         normalize_dir_matrix_m: False
     metrics:

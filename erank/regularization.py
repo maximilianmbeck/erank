@@ -55,8 +55,10 @@ class RegularizedLoss(nn.Module):
                 model: nn.Module = None) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         loss_dict = {}
         loss = self.loss_module(y_preds, y_labels)
-        if torch.isinf(loss):
-            LOGGER.warning(f'{LOG_LOSS_PREFIX}_{self.loss_module.__class__.__name__} is infinite!')
+        if torch.isinf(loss) or torch.isnan(loss):
+            LOGGER.warning(
+                f'{LOG_LOSS_PREFIX}_{self.loss_module.__class__.__name__} is Inf or NaN! Inf: {torch.isinf(loss)} | NaN: {torch.isnan(loss)}'
+            )
         loss_dict[f'{LOG_LOSS_PREFIX}_{self.loss_module.__class__.__name__}'] = loss
         loss_total = loss
         if not model is None:
@@ -64,6 +66,10 @@ class RegularizedLoss(nn.Module):
                 loss_reg = reg(model)
                 loss_dict[f'{LOG_LOSS_PREFIX}_{reg_name}'] = loss_reg
                 loss_total += reg.loss_coefficient * loss_reg
+                if torch.isinf(loss_reg) or torch.isnan(loss_reg):
+                    LOGGER.warning(
+                        f'{LOG_LOSS_PREFIX}_{reg_name} is Inf or NaN! Inf: {torch.isinf(loss_reg)} | NaN: {torch.isnan(loss_reg)}'
+                    )
 
         loss_dict[LOG_LOSS_TOTAL_KEY] = loss_total
 
@@ -161,6 +167,9 @@ class EffectiveRankRegularization(Regularizer):
         assert self.buffer_mode in EffectiveRankRegularization.buffer_modes, f'Unknown buffer mode: {self.buffer_mode}'
         assert self.optim_model_vec_mode in EffectiveRankRegularization.optim_model_vec_modes, f'Unknown optimized model vector mode: {self.optim_model_vec_mode}'
         assert self.subspace_vecs_mode in EffectiveRankRegularization.subspace_vecs_modes, f'Unknwon subspace vectors mode: {self.subspace_vecs_mode}'
+        LOGGER.info(f'Erank buffer_mode: {self.buffer_mode}')
+        LOGGER.info(f'Erank subspace_vecs_mode: {self.subspace_vecs_mode}')
+        LOGGER.info(f'Erank optim_model_vec_mode: {self.optim_model_vec_mode}')
 
         #* subspace vec buffer
         self.subspace_vec_buffer: Deque[torch.Tensor] = None
@@ -200,16 +209,17 @@ class EffectiveRankRegularization(Regularizer):
 
     def init_subspace_vecs(self, path_to_buffer_or_runs: str = '', random_buffer: bool = False) -> None:
         if random_buffer:
-            subspace_vecs = torch.normal(mean=0, std=1, size=(self.buffer_size, self._n_model_params), device=self._device)
+            subspace_vecs = torch.normal(mean=0,
+                                         std=1,
+                                         size=(self.buffer_size, self._n_model_params),
+                                         device=self._device)
         else:
             assert path_to_buffer_or_runs
             load_path = Path(path_to_buffer_or_runs)
             if load_path.is_dir():
                 subspace_vecs = load_directions_matrix_from_task_sweep(
-                    load_path,
-                    num_runs=self.buffer_size,
-                    device=self._device,
-                    use_absolute_model_params=False) # TODO make configurable
+                    load_path, num_runs=self.buffer_size, device=self._device,
+                    use_absolute_model_params=False)  # TODO make configurable
                 LOGGER.info(
                     f'Loaded erank directions from run dir {path_to_buffer_or_runs} (shape {subspace_vecs.shape}).')
             else:
@@ -279,11 +289,15 @@ class EffectiveRankRegularization(Regularizer):
         Args:
             model (nn.Module): The model.
         """
-        with torch.no_grad():
-            # this makes a copy of the model parameters.
-            model_vec = nn.utils.parameters_to_vector(model.parameters())
-            assert self._base_model_vec.device == model_vec.device
-            self._base_model_vec.data = model_vec
+        if self.optim_model_vec_mode == 'basediff' or self.subspace_vecs_mode == 'basediff':
+            with torch.no_grad():
+                # this makes a copy of the model parameters.
+                model_vec = nn.utils.parameters_to_vector(model.parameters())
+                assert self._base_model_vec.device == model_vec.device
+                self._base_model_vec.data = model_vec
+        else:
+            # LOGGER.warning('`set_base_model()` called, but no mode is `basediff`.')
+            pass
 
     def get_model_update_step_norm(self, steps_before: int = 1, ord: int = 2) -> float:
         """Returns the norm of the update step. The update step is the difference between the last model and the model at `steps_before` 

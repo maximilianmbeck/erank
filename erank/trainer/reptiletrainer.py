@@ -182,9 +182,11 @@ class ReptileTrainer(ErankBaseTrainer):
                 loss, loss_dict = self._loss(ys_pred, ys)  # no regularization
             else:
                 raise ValueError(f'Unsupported inner-loop learning mode: `{mode}`')
-            
+
             if torch.isnan(loss):
-                raise RuntimeError(f'Loss NaN in inner iteration {i} of epoch {self._epoch}.')
+                raise RuntimeError(
+                    f'Loss NaN in inner iteration {i} of epoch {self._epoch}. Single Loss Terms: \n{pd.Series(convert_dict_to_python_types(loss_dict), dtype=float)}'
+                )
 
             # backward pass
             inner_optimizer.zero_grad()
@@ -357,7 +359,7 @@ class ReptileTrainer(ErankBaseTrainer):
                                  epoch=epoch,
                                  metrics_epoch=losses_inner_plot_log,
                                  log_to_console=False)
-        val_score_metric_name = list(self._val_metrics.keys())[0] # the first metric in val_metrics
+        val_score_metric_name = list(self._val_metrics.keys())[0]  # the first metric in val_metrics
         val_score = losses_eval_after_df.mean()[f'{val_score_metric_name}{LOG_SEP_SYMBOL}after']
         self._reset_metrics()
         return val_score
