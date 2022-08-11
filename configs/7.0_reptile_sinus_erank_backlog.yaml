@@ -30,7 +30,7 @@ sweep:
       vals: [1, 5, 10]
     - parameter: trainer.n_inner_iter
       vals: [10, 30, 100]
-    - parameter: trainer.erank.loss_coefficient
+    - parameter: trainer.erank.erank_kwargs.loss_coefficient
       vals: [0.0, 0.01, 0.1]
 
 start_num: 0 # use this to count how often this config is run
@@ -41,7 +41,7 @@ config:
     entity: jkuiml-fsl # null
     project_name: erank_meta
     experiment_tag: "7.0"
-    experiment_name: sinus-${config.experiment_data.experiment_tag}.${start_num}-erank_backlog-loss_coeff-${trainer.erank.loss_coefficient}-task_bs-${config.trainer.task_batch_size}-inner_iter-${config.trainer.n_inner_iter}
+    experiment_name: sinus-${config.experiment_data.experiment_tag}.${start_num}-erank_backlog-loss_coeff-${config.trainer.erank.erank_kwargs.loss_coefficient}-task_bs-${config.trainer.task_batch_size}-inner_iter-${config.trainer.n_inner_iter}
     experiment_dir: null
     seed: 0
     hostname: null # the server on which the run is run, will be filled by run_handler
