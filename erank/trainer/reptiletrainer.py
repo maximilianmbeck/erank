@@ -122,8 +122,7 @@ class ReptileTrainer(ErankBaseTrainer):
             losses_inner_eval[task.name] = log_losses_inner_eval
 
         #! meta-model gradient step
-        # TODO from here log to epoch stats
-        # TODO log outer grad norm -> write a grad norm method in ml_utilities
+        epoch_stats['meta-grad-norm'] = compute_grad_norm(self._model)
         # outer loop step / update meta-parameters
         self._optimizer.step()
         self._optimizer.zero_grad()
@@ -200,16 +199,15 @@ class ReptileTrainer(ErankBaseTrainer):
                     f'Loss NaN in inner iteration {i} of epoch {self._epoch}. Single Loss Terms: \n{pd.Series(convert_dict_to_python_types(loss_dict), dtype=float)}'
                 )
 
-            if self._verbose:
-                loss_dict['weight_norm'] = compute_weight_norm(inner_model)
+            loss_dict['weight_norm'] = compute_weight_norm(inner_model)
 
             # backward pass
             inner_optimizer.zero_grad()
             loss.backward()
             inner_optimizer.step()
 
+            loss_dict['grad_norm'] = compute_grad_norm(inner_model)
             if self._verbose:
-                loss_dict['grad_norm'] = compute_grad_norm(inner_model)
                 LOGGER.debug(f'Inner losses, weights, grads: \n{pd.Series(convert_dict_to_python_types(loss_dict), dtype=float)}')
             
             # eval during fine-tuning

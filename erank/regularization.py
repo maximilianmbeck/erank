@@ -12,6 +12,8 @@ LOGGER = logging.getLogger(__name__)
 LOG_LOSS_PREFIX = 'loss'
 LOG_LOSS_TOTAL_KEY = f'{LOG_LOSS_PREFIX}_total'
 
+EPSILON_ORIGIN = 1e-6
+MIN_OPTIM_VEC_NORM = 1e-8
 
 class Regularizer(nn.Module, ABC):
     """A class defining the interface for a regularizer.
@@ -130,6 +132,8 @@ class EffectiveRankRegularization(Regularizer):
         normalize_directions (bool, optional): Normalize all model parameters in the directions matrix M, 
                                                i.e. all row vectors in M are normalized to 1 before computing the erank. 
                                                Defaults to False.
+        epsilon_origin (float): The std of normal Gaussian which is added to small (in terms of L2-norm) optim_model_vecs
+        min_optim_vec_norm (float): The lower bound for optim_model_vec norm. Below this margin, noise will be added to parameter vector.
 
     References:
         .. [#] Roy, Olivier, and Martin Vetterli. "The effective rank: A measure of effective dimensionality."
@@ -151,6 +155,8 @@ class EffectiveRankRegularization(Regularizer):
             track_last_n_model_steps: int = 2,
             normalize_dir_matrix_m: bool = False,
             loss_coefficient_learnable: bool = False,
+            epsilon_origin_std: float = EPSILON_ORIGIN,
+            min_optim_vec_norm: float = MIN_OPTIM_VEC_NORM,
             name: str = 'erank'):
         super().__init__(name=name,
                          loss_coefficient=loss_coefficient,
@@ -163,6 +169,8 @@ class EffectiveRankRegularization(Regularizer):
         self.normalize_dir_matrix_m = normalize_dir_matrix_m
         self._device = device
         self._n_model_params = len(nn.utils.parameters_to_vector(init_model.parameters()))
+        self._epsilon_origin_std = epsilon_origin_std
+        self._min_optim_vec_norm = min_optim_vec_norm
 
         assert self.buffer_mode in EffectiveRankRegularization.buffer_modes, f'Unknown buffer mode: {self.buffer_mode}'
         assert self.optim_model_vec_mode in EffectiveRankRegularization.optim_model_vec_modes, f'Unknown optimized model vector mode: {self.optim_model_vec_mode}'
@@ -356,6 +364,11 @@ class EffectiveRankRegularization(Regularizer):
             optim_model_vec = model_vec - self._model_params_queue[-2]
         elif optim_model_vec_mode == 'basediff':
             optim_model_vec = model_vec - self._base_model_vec
+
+        # avoid numeric instabilities, when evaluating erank gradient at non-smooth location: erank(M(theta)) is not smooth at/close to the origin
+        # see `6.2-erank_gradient.ipynb`
+        if torch.linalg.norm(optim_model_vec, ord=2, dim=0) < self._min_optim_vec_norm:
+            optim_model_vec += self._epsilon_origin_std * torch.randn_like(optim_model_vec, requires_grad=False)
 
         # update subspace vecs
         if self.buffer_mode == 'queue':
