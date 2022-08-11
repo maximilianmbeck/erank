@@ -9,6 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from torch import nn
+from torch.utils import data
 from tqdm import tqdm
 from omegaconf import DictConfig, ListConfig
 from erank.data import get_metadataset_class
@@ -73,8 +74,16 @@ class ReptileTrainer(ErankBaseTrainer):
         self._datasets = dict(train=train_tasks, val=val_tasks)
 
     def _create_dataloaders(self) -> None:
-        # does nothing, for compatibility reasons
-        self._loaders = {}
+        num_workers = self.config.trainer.get('num_workers', 0)
+        if num_workers == 0:
+            LOGGER.warning('Number of workers for data loading is zero. Loading data in main process.')
+        # use persistent workers so the workers are re-used across episodes (i.e., despite creating new iterators).
+        # don't do any batching, because we will use each episode individually
+        train_loader = data.DataLoader(self._datasets['train'],
+                                       batch_size=None,
+                                       num_workers=num_workers,
+                                       persistent_workers=num_workers > 0)
+        self._loaders = dict(train=train_loader)
 
     def _train_epoch(self, epoch: int) -> None:
         LOGGER.debug(f'--Train epoch: {epoch}')
@@ -84,12 +93,14 @@ class ReptileTrainer(ErankBaseTrainer):
         # zero grad of model, since the task updates/gradients will be accumulated there
         self._model.zero_grad()
 
+        episode_iter = iter(self._loaders['train'])
         # parallel version of Reptile (iterate over a batch of tasks)
-        task_batch = self._datasets['train'].sample_tasks(self._task_batch_size)
+        # task_batch = self._datasets['train'].sample_tasks(self._task_batch_size)
         # pbar = tqdm(task_batch, desc=f'Train epoch {epoch}', file=sys.stdout) # don't use tqdm for performance reasons
-        for task_idx, task in enumerate(task_batch):
+        for task_idx in range(self._task_batch_size):
             LOGGER.debug(f'----Task idx: {task_idx}')
             # sample support and query set
+            task = next(episode_iter)
             support_set, query_set = task.support_set, task.query_set
 
             # copy model parameters and do inner-loop learning
