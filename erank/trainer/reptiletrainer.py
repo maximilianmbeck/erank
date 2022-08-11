@@ -55,6 +55,9 @@ class ReptileTrainer(ErankBaseTrainer):
             # make sure to always evaluate the meta/base model before finetuning
             if not 0 in self._inner_eval_after_steps:
                 self._inner_eval_after_steps.append(0)
+            # make sure to always evaluate the finetuned model after the finetuning
+            if not self._n_inner_iter in self._inner_eval_after_steps:
+                self._inner_eval_after_steps.append(self._n_inner_iter)
 
         self._inner_train_step = 0
         self.__inner_learning_curves_ylim_upper = None
