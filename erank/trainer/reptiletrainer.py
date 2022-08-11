@@ -98,6 +98,7 @@ class ReptileTrainer(ErankBaseTrainer):
                 'train', inner_model, support_set, eval_after_steps=[])  # no evaluation during inner-loop training
 
             # eval on query set with inner-loop optimized model
+            query_set = support_query_as_minibatch(query_set, self.device)
             log_losses_inner_eval, query_preds = self._inner_loop_eval(inner_model, query_set)
             LOGGER.debug(
                 f'Train inner eval losses: \n{pd.Series(convert_dict_to_python_types(log_losses_inner_eval), dtype=float)}'
@@ -176,6 +177,12 @@ class ReptileTrainer(ErankBaseTrainer):
         losses_inner: List[Dict[str, torch.Tensor]] = []
         losses_inner_eval, inner_eval_preds = {}, {}
 
+        # do full-batch training on support set and full-batch eval on query set,
+        # move them to device here to avoid unnecessary copy operations
+        support_set = support_query_as_minibatch(support_set, self.device)
+        if query_set:
+            query_set = support_query_as_minibatch(query_set, self.device)
+
         inner_model.train(True)
         inner_optimizer, _ = create_optimizer_and_scheduler(inner_model.parameters(), **self._inner_optimizer)
         inner_optimizer.zero_grad()
@@ -186,7 +193,7 @@ class ReptileTrainer(ErankBaseTrainer):
         # do inner-loop optimization
         for i in range(self._n_inner_iter):
             LOGGER.debug(f'------Inner iter: {i}')
-            xs, ys = support_query_as_minibatch(support_set, self.device)
+            xs, ys = support_set
             # forward pass
             ys_pred = inner_model(xs)
             if mode == 'train':
@@ -211,8 +218,10 @@ class ReptileTrainer(ErankBaseTrainer):
 
             loss_dict['grad_norm'] = compute_grad_norm(inner_model)
             if self._verbose:
-                LOGGER.debug(f'Inner losses, weights, grads: \n{pd.Series(convert_dict_to_python_types(loss_dict), dtype=float)}')
-            
+                LOGGER.debug(
+                    f'Inner losses, weights, grads: \n{pd.Series(convert_dict_to_python_types(loss_dict), dtype=float)}'
+                )
+
             # eval during fine-tuning
             do_eval_after_step(i)
 
@@ -227,7 +236,7 @@ class ReptileTrainer(ErankBaseTrainer):
 
     def _inner_loop_eval(self, inner_model: nn.Module,
                          query_set: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[Dict[str, float], torch.Tensor]:
-        xq, yq = support_query_as_minibatch(query_set, self.device)
+        xq, yq = query_set
         inner_model.train(False)
         with torch.no_grad():
             yq_pred = inner_model(xq)
@@ -281,8 +290,11 @@ class ReptileTrainer(ErankBaseTrainer):
 
     ###### LOGGING
 
-    def __log_train_epoch(self, epoch: int, losses_inner_learning: Dict[str, List[Dict[str, torch.Tensor]]],
-                          losses_inner_eval: Dict[str, Dict[str, float]], epoch_stats: Dict[str, float] = {}) -> None:
+    def __log_train_epoch(self,
+                          epoch: int,
+                          losses_inner_learning: Dict[str, List[Dict[str, torch.Tensor]]],
+                          losses_inner_eval: Dict[str, Dict[str, float]],
+                          epoch_stats: Dict[str, float] = {}) -> None:
         """Log results of a training iteration (epoch).
 
         Args:
@@ -298,7 +310,10 @@ class ReptileTrainer(ErankBaseTrainer):
         losses_inner_learning = self.__process_log_inner_learning(losses_inner_learning)
         losses_inner_learning = pd.DataFrame(losses_inner_learning).transpose().mean().add_prefix(
             f'support{LOG_SEP_SYMBOL}').add_suffix(f'{LOG_SEP_SYMBOL}taskmean').to_dict()
-        losses_epoch = dict(inner_train_step=self._inner_train_step, **losses_inner_eval, **losses_inner_learning, **epoch_stats)
+        losses_epoch = dict(inner_train_step=self._inner_train_step,
+                            **losses_inner_eval,
+                            **losses_inner_learning,
+                            **epoch_stats)
         self._finish_train_epoch(epoch, losses_epoch)
 
     def __process_log_inner_learning(
