@@ -345,7 +345,7 @@ class ReptileTrainer(ErankBaseTrainer):
             # extract loss of the first step
             log_dict.update(task_log_df.iloc[0].add_suffix(f'{LOG_SEP_SYMBOL}stepfirst').to_dict())
             # extract mean loss across steps
-            log_dict.update(task_log_df.mean().add_suffix(f'{LOG_SEP_SYMBOL}stepmean').to_dict())
+            # log_dict.update(task_log_df.mean().add_suffix(f'{LOG_SEP_SYMBOL}stepmean').to_dict())
             # extract loss of the last step
             log_dict.update(task_log_df.iloc[-1].add_suffix(f'{LOG_SEP_SYMBOL}steplast').to_dict())
             task_summary_log_dicts[task_name] = log_dict
@@ -383,9 +383,10 @@ class ReptileTrainer(ErankBaseTrainer):
         losses_eval_df.to_csv(save_path / SAVEFNAME_RESULTS_EVAL_TABLE.format(epoch=epoch))
         # extract global metrics accross all tasks
         losses_eval_taskmean_df = losses_eval_df.mean().add_suffix(f'{LOG_SEP_SYMBOL}taskmean')
-        losses_eval_taskmedian_df = losses_eval_df.median().add_suffix(f'{LOG_SEP_SYMBOL}taskmedian')
-        log_dict_losses_eval: Dict[str, float] = pd.concat([losses_eval_taskmean_df, losses_eval_taskmedian_df],
-                                                           axis=0).to_dict()
+        # losses_eval_taskmedian_df = losses_eval_df.median().add_suffix(f'{LOG_SEP_SYMBOL}taskmedian')
+        # log_dict_losses_eval: Dict[str, float] = pd.concat([losses_eval_taskmean_df, losses_eval_taskmedian_df],
+        #                                                    axis=0).to_dict()
+        log_dict_losses_eval: Dict[str, float] = losses_eval_taskmean_df.to_dict()
 
         #! LEARNING: prefix 'support{LOG_SEP_SYMBOL}': losses_inner_learning
         processed_losses_inner_learning = self.__process_log_inner_learning(losses_inner_learning)
