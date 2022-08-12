@@ -9,7 +9,7 @@ run_config:
   exec_type: parallel # sequential
   hostname: dragonfly
   gpu_ids: [2, 3]
-  runs_per_gpu: 10 # runs need 1.5GB GPU memory
+  runs_per_gpu: 5 # runs need 1.5GB GPU memory
 
   wandb: # wandb config for run_handler, if "wandb: null" then logging to wandb is disabled for run_handler
     init:
