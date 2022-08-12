@@ -8,7 +8,7 @@ hydra:
 run_config:
   exec_type: parallel # sequential
   hostname: dragonfly
-  gpu_ids: [0, 1, 2, 3]
+  gpu_ids: [0, 1]
   runs_per_gpu: 5 # runs need 1.5GB GPU memory
 
   wandb: # wandb config for run_handler, if "wandb: null" then logging to wandb is disabled for run_handler
@@ -27,13 +27,15 @@ sweep:
   type: grid
   axes:
     - parameter: trainer.task_batch_size
-      vals: [1, 5, 10]
+      vals: [1, 10] #[1, 5, 10]
     - parameter: trainer.n_inner_iter
-      vals: [10, 30, 100]
-    - parameter: trainer.erank.erank_kwargs.loss_coefficient
-      vals: [0.0, 0.01, 0.1]
+      vals: [30, 100] #[10, 30, 100]
+    # - parameter: trainer.erank.erank_kwargs.loss_coefficient # loss_coeff-${config.trainer.erank.erank_kwargs.loss_coefficient}
+    #   vals: #[0.0, 0.01, 0.1]
+    - parameter: trainer.erank.type
+      vals: ["buffer", "none"]
 
-start_num: 0 # use this to count how often this config is run
+start_num: 1 # use this to count how often this config is run
 
 ###
 config:
@@ -41,7 +43,7 @@ config:
     entity: jkuiml-fsl # null
     project_name: erank_meta
     experiment_tag: "7.0"
-    experiment_name: sinus-${config.experiment_data.experiment_tag}.${start_num}-erank_backlog-loss_coeff-${config.trainer.erank.erank_kwargs.loss_coefficient}-task_bs-${config.trainer.task_batch_size}-inner_iter-${config.trainer.n_inner_iter}
+    experiment_name: sinus-${config.experiment_data.experiment_tag}.${start_num}-erank_backlog-erank-${config.trainer.erank.type}-loss_coeff-${config.trainer.erank.erank_kwargs.loss_coefficient}-task_bs-${config.trainer.task_batch_size}-inner_iter-${config.trainer.n_inner_iter}
     experiment_dir: null
     seed: 0
     hostname: null # the server on which the run is run, will be filled by run_handler
@@ -83,13 +85,13 @@ config:
     optimizer_scheduler:
       optimizer_name: sgd #adamw # TODO implement optimizer state sharing between inner loops
       optimizer_kwargs:
-        lr: 0.001 # default sine: 0.001
+        lr: 0.1 # default sine: 0.001
         weight_decay: 0.0 #0.001
     init_model: null
     inner_optimizer:
       optimizer_name: sgd
       optimizer_kwargs:
-        lr: 0.01 # default sine: 0.01
+        lr: 0.001 # default sine: 0.01
     n_inner_iter: XXX #30 #3
     val_pred_plots_for_tasks: 1 # Prediction plots for `val_plots` tasks. If int: Uses the first `val_plots` tasks to generate plots
     inner_eval_after_steps: [0, 1, 2, 3, 5, 10, 20, 30, 50] # null: use default, List[int]: list of steps after, which eval is done
@@ -97,10 +99,10 @@ config:
 
     loss: mse
     erank:
-      type: buffer #weightsdiff #none #random #buffer
+      type: XXX #buffer #weightsdiff #none #random #buffer
       dir_buffer: null
       erank_kwargs:
-        loss_coefficient: XXX
+        loss_coefficient: 1.0 #XXX
         buffer_size: ${config.trainer.task_batch_size} #10 # number of directions stored in the buffer
         buffer_mode: backlog # none, backlog, queue
         optim_model_vec_mode: basediff #abs #basediff # abs, stepdiff, basediff
