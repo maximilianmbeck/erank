@@ -7,8 +7,8 @@ hydra:
 #######
 run_config:
   exec_type: parallel # sequential
-  hostname: fox
-  gpu_ids: [0, 1]
+  hostname: dragonfly
+  gpu_ids: [2, 3]
   runs_per_gpu: 10 # runs need 1.5GB GPU memory
 
   wandb: # wandb config for run_handler, if "wandb: null" then logging to wandb is disabled for run_handler
