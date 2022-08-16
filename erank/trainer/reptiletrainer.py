@@ -108,6 +108,7 @@ class ReptileTrainer(ErankBaseTrainer):
                 'train', inner_model, support_set, eval_after_steps=[])  # no evaluation during inner-loop training
 
             # eval on query set with inner-loop optimized model
+            log_losses_inner_eval = {}
             if self._log_train_epoch_every > 0 and epoch % self._log_train_epoch_every == 0:
                 query_set = support_query_as_minibatch(query_set, self.device)
                 log_losses_inner_eval, query_preds = self._inner_loop_eval(inner_model, query_set)
