@@ -7,9 +7,9 @@ hydra:
 #######
 run_config:
   exec_type: parallel # sequential
-  hostname: panther
-  gpu_ids: [0]
-  runs_per_gpu: 1 # runs need 1.5GB GPU memory
+  hostname: cayman
+  gpu_ids: [1, 2]
+  runs_per_gpu: 3 # runs need 1.5GB GPU memory
 
   wandb: # wandb config for run_handler, if "wandb: null" then logging to wandb is disabled for run_handler
     init:
@@ -42,7 +42,7 @@ config:
   experiment_data:
     entity: jkuiml-fsl # null
     project_name: erank_meta
-    experiment_tag: "7.4"
+    experiment_tag: "7.5"
     experiment_name: sinus-${config.experiment_data.experiment_tag}.${start_num}-erank_backlog-erank-${config.trainer.erank.type}-loss_coeff-${config.trainer.erank.erank_kwargs.loss_coefficient}-task_bs-${config.trainer.task_batch_size}-inner_iter-${config.trainer.n_inner_iter}
     experiment_dir: null
     seed: 0
@@ -81,7 +81,7 @@ config:
     val_every: 1e3
     save_every: 10e6 # do not save during training manually
     early_stopping_patience: 10e3 # outer update steps # no early stopping
-    task_batch_size: XXX #10 #1 #5 # meta-batch size (number of tasks sampled per iteration)
+    task_batch_size: 10 #XXX #10 #1 #5 # meta-batch size (number of tasks sampled per iteration)
     optimizer_scheduler:
       optimizer_name: sgd #adamw # TODO implement optimizer state sharing between inner loops
       optimizer_kwargs:
@@ -92,17 +92,17 @@ config:
       optimizer_name: sgd
       optimizer_kwargs:
         lr: 0.001 # default sine: 0.01
-    n_inner_iter: XXX #30 #3
+    n_inner_iter: 100 #XXX #30 #3
     val_pred_plots_for_tasks: 0 #1 # Prediction plots for `val_plots` tasks. If int: Uses the first `val_plots` tasks to generate plots
     inner_eval_after_steps: #[0, 1, 2, 3, 5, 10, 20, 30, 50] # null: use default, List[int]: list of steps after, which eval is done
     log_plot_inner_learning_curves: true
 
     loss: mse
     erank:
-      type: XXX #buffer #weightsdiff #none #random #buffer
+      type: buffer #XXX #buffer #weightsdiff #none #random #buffer
       dir_buffer: null
       erank_kwargs:
-        loss_coefficient: XXX
+        loss_coefficient: 10 #XXX
         buffer_size: ${config.trainer.task_batch_size} #10 # number of directions stored in the buffer
         buffer_mode: backlog # none, backlog, queue
         optim_model_vec_mode: basediff #abs #basediff # abs, stepdiff, basediff
