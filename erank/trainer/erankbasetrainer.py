@@ -39,6 +39,8 @@ class ErankBaseTrainer(BaseTrainer):
                          early_stopping_patience=config.trainer.early_stopping_patience)
         #
         self._erank_regularizer: EffectiveRankRegularization = None
+        self._log_train_epoch_every = self.config.trainer.get('log_train_epoch_every', 1)
+
 
     def _setup(self):
         LOGGER.info('Starting wandb.')
@@ -110,8 +112,7 @@ class ErankBaseTrainer(BaseTrainer):
                             epoch: int,
                             losses_epoch: Dict[str, Union[List[float], float]] = {},
                             metrics_epoch: Dict[str, Union[float, torch.Tensor]] = {}) -> None:
-        log_train_epoch_every = self.config.trainer.get('log_train_epoch_every', 1)
-        if log_train_epoch_every > 0 and epoch % log_train_epoch_every == 0:
+        if self._log_train_epoch_every > 0 and epoch % self._log_train_epoch_every == 0:
             self._log_losses_metrics('train', epoch, losses_epoch, metrics_epoch)
             self._reset_metrics()
 

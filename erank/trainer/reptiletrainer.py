@@ -45,19 +45,18 @@ class ReptileTrainer(ErankBaseTrainer):
         self._log_plot_inner_learning_curves = self.config.trainer.get('log_plot_inner_learning_curves', False)
         self._verbose = self.config.trainer.get('verbose', False)
 
-        self._inner_eval_after_steps = self.config.trainer.get('inner_eval_after_steps', None)
+        self._inner_eval_after_steps = self.config.trainer.get('inner_eval_after_steps', [0])
         if self._inner_eval_after_steps is None:
             # use a default list
-            self._inner_eval_after_steps = [0, 1, 2, 3, 5, 10, 20, 30, 50]
-        else:
-            if not isinstance(self._inner_eval_after_steps, (list, ListConfig)):
-                assert isinstance(self._inner_eval_after_steps, (float, int))
-                self._inner_eval_after_steps = [self._inner_eval_after_steps]
-            # make sure to always evaluate the meta/base model before finetuning
-            if not 0 in self._inner_eval_after_steps:
-                self._inner_eval_after_steps.append(0)
-            # make sure to always evaluate the finetuned model after the finetuning
-            if not self._n_inner_iter in self._inner_eval_after_steps:
+            self._inner_eval_after_steps = [0] #[0, 1, 2, 3, 5, 10, 20, 30, 50]
+        if not isinstance(self._inner_eval_after_steps, (list, ListConfig)):
+            assert isinstance(self._inner_eval_after_steps, (float, int))
+            self._inner_eval_after_steps = [self._inner_eval_after_steps]
+        # make sure to always evaluate the meta/base model before finetuning
+        if not 0 in self._inner_eval_after_steps:
+            self._inner_eval_after_steps.append(0)
+        # make sure to always evaluate the finetuned model after the finetuning
+        if not self._n_inner_iter in self._inner_eval_after_steps:
                 self._inner_eval_after_steps.append(self._n_inner_iter)
 
         self._inner_train_step = 0
@@ -109,15 +108,16 @@ class ReptileTrainer(ErankBaseTrainer):
                 'train', inner_model, support_set, eval_after_steps=[])  # no evaluation during inner-loop training
 
             # eval on query set with inner-loop optimized model
-            query_set = support_query_as_minibatch(query_set, self.device)
-            log_losses_inner_eval, query_preds = self._inner_loop_eval(inner_model, query_set)
-            LOGGER.debug(
-                f'Train inner eval losses: \n{pd.Series(convert_dict_to_python_types(log_losses_inner_eval), dtype=float)}'
-            )
+            if self._log_train_epoch_every > 0 and epoch % self._log_train_epoch_every == 0:
+                query_set = support_query_as_minibatch(query_set, self.device)
+                log_losses_inner_eval, query_preds = self._inner_loop_eval(inner_model, query_set)
+                LOGGER.debug(
+                    f'Train inner eval losses: \n{pd.Series(convert_dict_to_python_types(log_losses_inner_eval), dtype=float)}'
+                )
 
             #! meta-model gradient update
             # after inner-loop optimization: accumulate gradients in self._model.grad / meta_model
-            # calculate meta-gradient: meta_model - task_model | paramters(self._model) - parameters(inner_model) | g = phi - phi_i
+            # calculate meta-gradient: meta_model - task_model | parameters(self._model) - parameters(inner_model) | g = phi - phi_i
             for meta_model_param, task_model_param in zip(self._model.parameters(), inner_model.parameters()):
                 g = meta_model_param - task_model_param  # partial meta-gradient
                 # average self._model.grad, i.e. divide by number of tasks
@@ -148,7 +148,8 @@ class ReptileTrainer(ErankBaseTrainer):
             self._erank_regularizer.set_base_model(self._model)
 
         # log epoch
-        self.__log_train_epoch(epoch, losses_inner_learning, losses_inner_eval, epoch_stats)
+        if self._log_train_epoch_every > 0 and epoch % self._log_train_epoch_every == 0:
+            self.__log_train_epoch(epoch, losses_inner_learning, losses_inner_eval, epoch_stats)
 
     def _inner_loop_learning(
         self,
@@ -258,7 +259,7 @@ class ReptileTrainer(ErankBaseTrainer):
         losses_inner_eval.update(convert_dict_to_python_types(loss_dict))
         # put train metrics into log dict
         losses_inner_eval.update(convert_dict_to_python_types(metric_vals))
-        return losses_inner_eval, yq_pred.detach().cpu()
+        return losses_inner_eval, yq_pred
 
     def _val_epoch(self, epoch: int, trained_model: nn.Module) -> float:
         LOGGER.debug(f'--Val epoch: {epoch}')
@@ -330,7 +331,7 @@ class ReptileTrainer(ErankBaseTrainer):
     def __process_log_inner_learning(
             self,
             log_dicts_losses_inner_learning: Dict[str, List[Dict[str, torch.Tensor]]],
-            exclude_loss_keys: List[str] = [LOG_LOSS_TOTAL_KEY]) -> Dict[str, Dict[str, float]]:
+            exclude_loss_keys: List[str] = []) -> Dict[str, Dict[str, float]]:
         """We get a list of log_dicts for every task (outer Dict[task.name, List[log_dict]]). The list contains the log_dict
         for each update step.
         Each log_dict contains all losses and metrics as keys and a list of values corresponding to a single 
