@@ -54,7 +54,7 @@ config:
       tags: # list(), used to tag wandblogger
         - ${config.experiment_data.experiment_tag}_exps
         - erank
-      notes: Hypsearch for Reptile erank backlog # str, used to make notes to wandblogger
+      notes: Lossweight sweep for erank backlog # str, used to make notes to wandblogger
       group: ${config.experiment_data.experiment_tag} # null
       job_type: startnum_${start_num} # examples: hypsearch, pretrain, eval, etc.
 
