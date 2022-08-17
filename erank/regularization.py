@@ -414,10 +414,11 @@ class EffectiveRankRegularization(Regularizer):
             torch.Tensor: Effective rank of matrix_A
         """
         assert matrix_A.ndim == 2
-        _, s, _ = torch.pca_lowrank(matrix_A,
-                                    center=center_matrix_A,
-                                    niter=1,
-                                    q=min(matrix_A.shape[0], matrix_A.shape[1]))  # TODO check with torch doc.
+        # _, s, _ = torch.pca_lowrank(matrix_A,
+        #                             center=center_matrix_A,
+        #                             niter=1,
+        #                             q=min(matrix_A.shape[0], matrix_A.shape[1]))  # TODO check with torch doc.
+        _, s, _ = torch.linalg.svd(matrix_A, full_matrices=False)
 
         # normalizes input s -> scale independent!
-        return torch.exp(torch.distributions.Categorical(s).entropy())
+        return torch.exp(torch.distributions.Categorical(probs=s).entropy())
