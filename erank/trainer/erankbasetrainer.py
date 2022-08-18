@@ -13,7 +13,7 @@ from ml_utilities.trainers.basetrainer import BaseTrainer
 from ml_utilities.torch_utils.factory import create_optimizer_and_scheduler
 from ml_utilities.torch_utils.metrics import get_metric_collection
 from hydra.core.hydra_config import HydraConfig
-from erank.regularization import EffectiveRankRegularization, RegularizedLoss
+from erank.regularization import EffectiveRankRegularizer, RegularizedLoss
 
 LOGGER = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class ErankBaseTrainer(BaseTrainer):
                          save_every=config.trainer.save_every,
                          early_stopping_patience=config.trainer.early_stopping_patience)
         #
-        self._erank_regularizer: EffectiveRankRegularization = None
+        self._erank_regularizer: EffectiveRankRegularizer = None
         self._log_train_epoch_every = self.config.trainer.get('log_train_epoch_every', 1)
 
 
@@ -79,7 +79,7 @@ class ErankBaseTrainer(BaseTrainer):
         if self._erank_regularizer:
             self._loss.add_regularizer(self._erank_regularizer)
 
-    def _create_erank_regularizer(self, model: nn.Module) -> EffectiveRankRegularization:
+    def _create_erank_regularizer(self, model: nn.Module) -> EffectiveRankRegularizer:
         erank_cfg = self.config.trainer.get('erank', None)
         erank_reg = None
         if erank_cfg is None or erank_cfg.type == 'none':
@@ -87,7 +87,7 @@ class ErankBaseTrainer(BaseTrainer):
         elif erank_cfg.type in ['random', 'weightsdiff', 'buffer']:
             LOGGER.info(f'Erank regularization of type {erank_cfg.type}.')
             erank_kwargs = erank_cfg.erank_kwargs
-            erank_reg = EffectiveRankRegularization(init_model=model, device=self.device, **erank_kwargs)
+            erank_reg = EffectiveRankRegularizer(init_model=model, device=self.device, **erank_kwargs)
             if erank_cfg.type == 'random':
                 erank_reg.init_subspace_vecs(random_buffer=True)
             elif erank_cfg.type == 'weightsdiff':

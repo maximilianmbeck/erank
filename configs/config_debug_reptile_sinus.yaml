@@ -73,11 +73,11 @@ config:
   trainer:
     training_setup: reptile
     n_epochs: 1e6 # number of iterations (outer/meta gradient steps)
-    log_train_epoch_every: 2 #1 #10
+    log_train_epoch_every: 1 #10
     val_every: 10
     save_every: 10000
     early_stopping_patience: null # no early stopping
-    task_batch_size: 5 #10 #1 #5 # meta-batch size (number of tasks sampled per iteration)
+    task_batch_size: 5 #1 #5 # meta-batch size (number of tasks sampled per iteration)
     optimizer_scheduler:
       optimizer_name: sgd #adamw # TODO implement optimizer state sharing between inner loops
       optimizer_kwargs:
@@ -88,7 +88,7 @@ config:
       optimizer_name: sgd
       optimizer_kwargs:
         lr: 0.001 # default sine: 0.01
-    n_inner_iter: 100 #3
+    n_inner_iter: 10 #100 #3
     val_pred_plots_for_tasks: 0 #1 # Prediction plots for `val_plots` tasks. If int: Uses the first `val_plots` tasks to generate plots
     inner_eval_after_steps: 0 #[0, 1, 2, 3, 5, 10, 20, 30, 50] # null: use default, List[int]: list of steps after, which eval is done
     log_plot_inner_learning_curves: true
@@ -99,7 +99,7 @@ config:
       type: buffer #weightsdiff #none #random #buffer
       dir_buffer: null
       erank_kwargs:
-        loss_coefficient: 0.01 #0.0 #0.01 #1.0 #XXX
+        loss_coefficient: 1.0 #XXX
         buffer_size: ${config.trainer.task_batch_size} #10 # number of directions stored in the buffer
         buffer_mode: backlog # none, backlog, queue
         optim_model_vec_mode: basediff #abs #basediff # abs, stepdiff, basediff
@@ -109,7 +109,7 @@ config:
     metrics:
       - MeanSquaredError
     num_workers: 4
-    verbose: False #True
+    verbose: True #True
 
   data: 
     metadataset: sinus

@@ -12,8 +12,9 @@ LOGGER = logging.getLogger(__name__)
 LOG_LOSS_PREFIX = 'loss'
 LOG_LOSS_TOTAL_KEY = f'{LOG_LOSS_PREFIX}_total'
 
-EPSILON_ORIGIN = 1e-6
+EPSILON_ORIGIN = 1e-8
 MIN_OPTIM_VEC_NORM = 1e-8
+
 
 class Regularizer(nn.Module, ABC):
     """A class defining the interface for a regularizer.
@@ -91,14 +92,9 @@ class RegularizedLoss(nn.Module):
         return regularizer_name in self._regularizers
 
 
-class EffectiveRankRegularization(Regularizer):
-    """Regularization of the effective rank that discourages weights from opening up new dimensions.
-    At the core of this "regularizer" (not sure, if this method can be considered as regularization at all) 
-    is a (direction) matrix M, which contains in its rows the weights of a neural network model. 
-    The (direction) matrix M can be divided in two parts (The vectors in these parts are stacked in rows.): 
-    - The subspace vectors (`subspace_vecs`): Weight vectors determining a subspace of the model being optimized. 
-            These vectors are detached and are not optimized (at least so far).
-    - The model vector (`optim_model_vec`): The parameters of the model being optimized flattened as a vector.
+class SubspaceRegularizer(Regularizer):
+    """Baseclass for subspace regularization methods.
+    This class takes care of collecting gradient (parameter) directions during training and computing the optim model vec mode.
 
     For more information on effective rank, see [#]_.
 
@@ -145,6 +141,7 @@ class EffectiveRankRegularization(Regularizer):
 
     def __init__(
             self,
+            name: str,
             init_model: nn.Module,
             device: torch.device,
             loss_coefficient: float,
@@ -154,10 +151,7 @@ class EffectiveRankRegularization(Regularizer):
             subspace_vecs_mode: str,  # abs, initdiff, basediff
             track_last_n_model_steps: int = 2,
             normalize_dir_matrix_m: bool = False,
-            loss_coefficient_learnable: bool = False,
-            epsilon_origin_std: float = EPSILON_ORIGIN,
-            min_optim_vec_norm: float = MIN_OPTIM_VEC_NORM,
-            name: str = 'erank'):
+            loss_coefficient_learnable: bool = False):
         super().__init__(name=name,
                          loss_coefficient=loss_coefficient,
                          loss_coefficient_learnable=loss_coefficient_learnable)
@@ -169,15 +163,13 @@ class EffectiveRankRegularization(Regularizer):
         self.normalize_dir_matrix_m = normalize_dir_matrix_m
         self._device = device
         self._n_model_params = len(nn.utils.parameters_to_vector(init_model.parameters()))
-        self._epsilon_origin_std = epsilon_origin_std
-        self._min_optim_vec_norm = min_optim_vec_norm
 
-        assert self.buffer_mode in EffectiveRankRegularization.buffer_modes, f'Unknown buffer mode: {self.buffer_mode}'
-        assert self.optim_model_vec_mode in EffectiveRankRegularization.optim_model_vec_modes, f'Unknown optimized model vector mode: {self.optim_model_vec_mode}'
-        assert self.subspace_vecs_mode in EffectiveRankRegularization.subspace_vecs_modes, f'Unknwon subspace vectors mode: {self.subspace_vecs_mode}'
-        LOGGER.info(f'Erank buffer_mode: {self.buffer_mode}')
-        LOGGER.info(f'Erank subspace_vecs_mode: {self.subspace_vecs_mode}')
-        LOGGER.info(f'Erank optim_model_vec_mode: {self.optim_model_vec_mode}')
+        assert self.buffer_mode in SubspaceRegularizer.buffer_modes, f'Unknown buffer mode: {self.buffer_mode}'
+        assert self.optim_model_vec_mode in SubspaceRegularizer.optim_model_vec_modes, f'Unknown optimized model vector mode: {self.optim_model_vec_mode}'
+        assert self.subspace_vecs_mode in SubspaceRegularizer.subspace_vecs_modes, f'Unknwon subspace vectors mode: {self.subspace_vecs_mode}'
+        LOGGER.info(f'SubspaceRegularizer buffer_mode: {self.buffer_mode}')
+        LOGGER.info(f'SubspaceRegularizer subspace_vecs_mode: {self.subspace_vecs_mode}')
+        LOGGER.info(f'SubspaceRegularizer optim_model_vec_mode: {self.optim_model_vec_mode}')
 
         #* subspace vec buffer
         self.subspace_vec_buffer: Deque[torch.Tensor] = None
@@ -244,7 +236,7 @@ class EffectiveRankRegularization(Regularizer):
             with torch.no_grad():
                 self._model_params_queue.append(nn.utils.parameters_to_vector(model.parameters()))
 
-    def add_subspace_vec(self, model: nn.Module, ord: int=2) -> torch.Tensor:
+    def add_subspace_vec(self, model: nn.Module, ord: int = 2) -> torch.Tensor:
         """Depending on `buffer_mode` this method adds a subspace vector to the buffer.
         `buffer_mode`='backlog': Add a new model vector to `subspace_vec_backlog`. If backlog buffer is full, 
                                  buffer content is moved to `_subspace_vecs` and buffer is cleared.
@@ -337,12 +329,65 @@ class EffectiveRankRegularization(Regularizer):
             delta = self._model_params_queue[-1] - self._model_params_queue[-prev_index]
             return torch.linalg.norm(delta, dim=0, ord=ord).item()
 
-    def get_normalized_erank(self, model: nn.Module) -> float:
+    @abstractmethod
+    def forward(self, model: nn.Module) -> torch.Tensor:
+        pass
+
+    # TODO add function: `get_additional_logs() -> Dict[str, Union[float, np.ndarray, torch.Tensor]]`
+
+
+class EffectiveRankRegularizer(SubspaceRegularizer):
+    """Regularization of the effective rank that discourages weights from opening up new dimensions.
+    At the core of this "regularizer" (not sure, if this method can be considered as regularization at all) 
+    is a (direction) matrix M, which contains in its rows the weights of a neural network model. 
+    The (direction) matrix M can be divided in two parts (The vectors in these parts are stacked in rows.): 
+    - The subspace vectors (`subspace_vecs`): Weight vectors determining a subspace of the model being optimized. 
+            These vectors are detached and are not optimized (at least so far).
+    - The model vector (`optim_model_vec`): The parameters of the model being optimized flattened as a vector.
+
+    For more information on effective rank, see [#]_.
+    Args:
+        epsilon_origin_std (float, optional): _description_. Defaults to EPSILON_ORIGIN.
+        min_optim_vec_norm (float, optional): _description_. Defaults to MIN_OPTIM_VEC_NORM.
+        for others: see class SubspaceRegularizer
+    """
+    name = 'erank'
+
+    def __init__(
+            self,
+            init_model: nn.Module,
+            device: torch.device,
+            loss_coefficient: float,
+            buffer_size: int,
+            buffer_mode: str,  # none, queue, backlog
+            optim_model_vec_mode: str,  # abs, stepdiff, initdiff, basediff
+            subspace_vecs_mode: str,  # abs, initdiff, basediff
+            track_last_n_model_steps: int = 2,
+            normalize_dir_matrix_m: bool = False,
+            loss_coefficient_learnable: bool = False,
+            epsilon_origin_std: float = EPSILON_ORIGIN,
+            min_optim_vec_norm: float = MIN_OPTIM_VEC_NORM):
+        super().__init__(name=EffectiveRankRegularizer.name,
+                         init_model=init_model,
+                         device=device,
+                         loss_coefficient=loss_coefficient,
+                         buffer_size=buffer_size,
+                         buffer_mode=buffer_mode,
+                         optim_model_vec_mode=optim_model_vec_mode,
+                         subspace_vecs_mode=subspace_vecs_mode,
+                         track_last_n_model_steps=track_last_n_model_steps,
+                         normalize_dir_matrix_m=normalize_dir_matrix_m, 
+                         loss_coefficient_learnable=loss_coefficient_learnable)
+
+        self._epsilon_origin_std = epsilon_origin_std
+        self._min_optim_vec_norm = min_optim_vec_norm
+
+    def _get_normalized_erank(self, model: nn.Module) -> float:
         """Returns the normalized effective rank of matrix m composed of the subspace_vecs and the model."""
         if self._subspace_vecs.shape[0] < self.buffer_size:
             return torch.tensor(0.0, dtype=torch.float32, device=self._device)
         directions_matrix = self._construct_directions_matrix_m(model, use_abs_model_params=True, normalize_matrix=True)
-        return EffectiveRankRegularization.erank(directions_matrix)
+        return EffectiveRankRegularizer.erank(directions_matrix)
 
     def _construct_directions_matrix_m(self, model: nn.Module, optim_model_vec_mode: bool,
                                        normalize_matrix: bool) -> torch.Tensor:
@@ -365,8 +410,7 @@ class EffectiveRankRegularization(Regularizer):
         elif optim_model_vec_mode == 'basediff':
             optim_model_vec = model_vec - self._base_model_vec
 
-        # avoid numeric instabilities, when evaluating erank gradient at non-smooth location: erank(M(theta)) is not smooth at/close to the origin
-        # see `6.2-erank_gradient.ipynb`
+        # avoid numeric instabilities, when evaluating erank gradient
         if torch.linalg.norm(optim_model_vec, ord=2, dim=0) < self._min_optim_vec_norm:
             optim_model_vec += self._epsilon_origin_std * torch.randn_like(optim_model_vec, requires_grad=False)
 
@@ -400,7 +444,7 @@ class EffectiveRankRegularization(Regularizer):
         self._update_model_params_queue(model)
         directions_matrix = self._construct_directions_matrix_m(model, self.optim_model_vec_mode,
                                                                 self.normalize_dir_matrix_m)
-        return EffectiveRankRegularization.erank(directions_matrix)
+        return EffectiveRankRegularizer.erank(directions_matrix)
 
     @staticmethod
     def erank(matrix_A: torch.Tensor, center_matrix_A: bool = False) -> torch.Tensor:
@@ -414,6 +458,7 @@ class EffectiveRankRegularization(Regularizer):
             torch.Tensor: Effective rank of matrix_A
         """
         assert matrix_A.ndim == 2
+        # pca_lowrank causes numerical issues when evaluated near the origin
         # _, s, _ = torch.pca_lowrank(matrix_A,
         #                             center=center_matrix_A,
         #                             niter=1,
