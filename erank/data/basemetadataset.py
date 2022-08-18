@@ -1,6 +1,8 @@
+import sys
 from abc import ABC, abstractmethod
 from typing import Dict, List, Tuple
 import torch
+from torch.utils.data import IterableDataset
 from matplotlib.figure import Figure
 
 SUPPORT_X_KEY = QUERY_X_KEY = 'x'
@@ -71,7 +73,7 @@ class Task(ABC):
         return self.name
 
 
-class BaseMetaDataset(ABC):
+class BaseMetaDataset(ABC, IterableDataset):
     """
     TODO take care of normalization of inputs
 
@@ -120,6 +122,12 @@ class BaseMetaDataset(ABC):
             Task: The task.
         """
         pass
+    
+    def __iter__(self):
+        while True:
+            yield self.sample_tasks(num_tasks=1)[0]
 
     def __len__(self) -> int:
-        self.num_tasks
+        if self.num_tasks == -1:
+            return sys.maxsize
+        return self.num_tasks

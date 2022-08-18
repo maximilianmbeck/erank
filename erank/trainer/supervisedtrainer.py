@@ -38,19 +38,24 @@ class SupervisedTrainer(ErankBaseTrainer):
         self._datasets = dict(train=train_set, val=val_set)
 
     def _create_dataloaders(self) -> None:
-        train_loader = data.DataLoader(
-            dataset=self._datasets['train'],
-            batch_size=self.config.trainer.batch_size, shuffle=True, drop_last=False,
-            num_workers=self.config.trainer.num_workers)
-        val_loader = data.DataLoader(dataset=self._datasets['val'], batch_size=self.config.trainer.batch_size,
-                                     shuffle=True, drop_last=False, num_workers=self.config.trainer.num_workers)
+        train_loader = data.DataLoader(dataset=self._datasets['train'],
+                                       batch_size=self.config.trainer.batch_size,
+                                       shuffle=True,
+                                       drop_last=False,
+                                       num_workers=self.config.trainer.num_workers, 
+                                       persistent_workers=True)
+        val_loader = data.DataLoader(dataset=self._datasets['val'],
+                                     batch_size=self.config.trainer.batch_size,
+                                     shuffle=True,
+                                     drop_last=False,
+                                     num_workers=self.config.trainer.num_workers,
+                                     persistent_workers=True)
         self._loaders = dict(train=train_loader, val=val_loader)
 
     def _create_metrics(self) -> None:
         LOGGER.info('Creating metrics.')
         metrics = torchmetrics.MetricCollection(
-            [torchmetrics.Accuracy(),
-             EntropyCategorical(),
+            [torchmetrics.Accuracy(), EntropyCategorical(),
              MaxClassProbCategorical()])
         self._train_metrics = metrics.clone()  # prefix='train_'
         self._val_metrics = metrics.clone()  # prefix='val_'
@@ -75,7 +80,7 @@ class SupervisedTrainer(ErankBaseTrainer):
             loss_weight = 0.0
             if self._erank_regularizer is not None:
                 loss_reg = self._erank_regularizer.forward(self._model)
-                loss_weight = self._erank_regularizer.loss_weight
+                loss_weight = self._erank_regularizer.loss_coefficient
 
             loss_total = loss + loss_weight * loss_reg
 
@@ -97,17 +102,23 @@ class SupervisedTrainer(ErankBaseTrainer):
                 metric_vals = self._train_metrics(y_pred, ys)
             additional_logs = self._get_additional_train_step_log()
             # log step
-            wandb.log({'train_step/': {'epoch': epoch, 'train_step': self._train_step,
-                      **losses_step, **metric_vals, **additional_logs}})
+            wandb.log({
+                'train_step/': {
+                    'epoch': epoch,
+                    'train_step': self._train_step,
+                    **losses_step,
+                    **metric_vals,
+                    **additional_logs
+                }
+            })
             # save batch losses
             for loss_name in losses_epoch:
                 losses_epoch[loss_name].append(losses_step[loss_name])
 
         # log epoch
         metrics_epoch = self._train_metrics.compute()
-        
-        self._finish_train_epoch(epoch, losses_epoch, metrics_epoch)
 
+        self._finish_train_epoch(epoch, losses_epoch, metrics_epoch)
 
     def _get_additional_train_step_log(self) -> Dict[str, Any]:
         # norm of model parameter vector
@@ -129,7 +140,7 @@ class SupervisedTrainer(ErankBaseTrainer):
 
     def _val_epoch(self, epoch: int, trained_model: nn.Module) -> float:
 
-        losses_epoch = dict(loss=[]) # add more losses here if necessary
+        losses_epoch = dict(loss=[])  # add more losses here if necessary
 
         pbar = tqdm(self._loaders['val'], desc=f'Val epoch {epoch}', file=sys.stdout)
         for xs, ys in pbar:

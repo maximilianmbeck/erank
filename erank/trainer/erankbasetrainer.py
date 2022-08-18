@@ -11,8 +11,9 @@ from ml_utilities.torch_models import get_model_class
 from ml_utilities.torch_utils import get_loss
 from ml_utilities.trainers.basetrainer import BaseTrainer
 from ml_utilities.torch_utils.factory import create_optimizer_and_scheduler
+from ml_utilities.torch_utils.metrics import get_metric_collection
 from hydra.core.hydra_config import HydraConfig
-from erank.regularization import EffectiveRankRegularization
+from erank.regularization import EffectiveRankRegularization, RegularizedLoss
 
 LOGGER = logging.getLogger(__name__)
 
@@ -38,6 +39,8 @@ class ErankBaseTrainer(BaseTrainer):
                          early_stopping_patience=config.trainer.early_stopping_patience)
         #
         self._erank_regularizer: EffectiveRankRegularization = None
+        self._log_train_epoch_every = self.config.trainer.get('log_train_epoch_every', 1)
+
 
     def _setup(self):
         LOGGER.info('Starting wandb.')
@@ -69,36 +72,47 @@ class ErankBaseTrainer(BaseTrainer):
     def _create_loss(self) -> None:
         LOGGER.info('Creating loss.')
         loss_cls = get_loss(self.config.trainer.loss)
-        self._loss = loss_cls(reduction='mean')
+        loss_module = loss_cls(reduction='mean')
 
         self._erank_regularizer = self._create_erank_regularizer(self._model)
+        self._loss = RegularizedLoss(loss_module)
+        if self._erank_regularizer:
+            self._loss.add_regularizer(self._erank_regularizer)
 
     def _create_erank_regularizer(self, model: nn.Module) -> EffectiveRankRegularization:
         erank_cfg = self.config.trainer.get('erank', None)
         erank_reg = None
         if erank_cfg is None or erank_cfg.type == 'none':
             LOGGER.info('No erank regularizer.')
-        elif erank_cfg.type in ['random', 'pretraindiff']:
+        elif erank_cfg.type in ['random', 'weightsdiff', 'buffer']:
             LOGGER.info(f'Erank regularization of type {erank_cfg.type}.')
-            erank_reg = EffectiveRankRegularization(buffer_size=erank_cfg.buffer_size,
-                                                    init_model=model,
-                                                    loss_weight=erank_cfg.loss_weight,
-                                                    normalize_directions=erank_cfg.get('norm_directions', False),
-                                                    use_abs_model_params=erank_cfg.get('use_abs_model_params', True))
+            erank_kwargs = erank_cfg.erank_kwargs
+            erank_reg = EffectiveRankRegularization(init_model=model, device=self.device, **erank_kwargs)
             if erank_cfg.type == 'random':
-                erank_reg.init_directions_buffer(random_buffer=True)
-            elif erank_cfg.type == 'pretraindiff':
-                erank_reg.init_directions_buffer(path_to_buffer_or_runs=erank_cfg.dir_buffer)
+                erank_reg.init_subspace_vecs(random_buffer=True)
+            elif erank_cfg.type == 'weightsdiff':
+                dir_buffer_path = erank_cfg.get('dir_buffer', None)
+                if dir_buffer_path is None:
+                    raise ValueError(f'Erank type is `weightsdiff`, but no buffer path is given!')
+                erank_reg.init_subspace_vecs(path_to_buffer_or_runs=dir_buffer_path)
+            elif erank_cfg.type == 'buffer':
+                pass # does nothing, buffer is filled during training
         else:
             raise ValueError(f'Unknown erank type: {erank_cfg.type}')
         return erank_reg
+
+    def _create_metrics(self) -> None:
+        LOGGER.info('Creating metrics.')
+        metric_names = self.config.trainer.metrics
+        metrics = get_metric_collection(metric_names=metric_names)
+        self._train_metrics = metrics.clone()  # prefix='train_'
+        self._val_metrics = metrics.clone()  # prefix='val_'
 
     def _finish_train_epoch(self,
                             epoch: int,
                             losses_epoch: Dict[str, Union[List[float], float]] = {},
                             metrics_epoch: Dict[str, Union[float, torch.Tensor]] = {}) -> None:
-        log_train_epoch_every = self.config.trainer.get('log_train_epoch_every', 1)
-        if log_train_epoch_every > 0 and epoch % log_train_epoch_every == 0:
+        if self._log_train_epoch_every > 0 and epoch % self._log_train_epoch_every == 0:
             self._log_losses_metrics('train', epoch, losses_epoch, metrics_epoch)
             self._reset_metrics()
 
