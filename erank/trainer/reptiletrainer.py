@@ -58,7 +58,12 @@ class ReptileTrainer(ErankBaseTrainer):
         # make sure to always evaluate the finetuned model after the finetuning
         if not self._n_inner_iter in self._inner_eval_after_steps:
                 self._inner_eval_after_steps.append(self._n_inner_iter)
+        
+        val_mode = self.config.trainer.val_mode
+        assert val_mode in ['reg', 'noreg']
+        self._val_mode = f'val-{val_mode}'
 
+        # running stats
         self._inner_train_step = 0
         self.__inner_learning_curves_ylim_upper = None
 
@@ -164,7 +169,7 @@ class ReptileTrainer(ErankBaseTrainer):
         Evaluation is performed after every step in `eval_after_steps`.
 
         Args:
-            mode (str): `train` or `val`. Might have effect on the loss used for example.
+            mode (str): `train` or `val`. Might have effect on the loss used, for example.
             inner_model (nn.Module): The base/meta model to finetune.
             support_set (Tuple[torch.Tensor, torch.Tensor]): The training set.
             query_set (Tuple[torch.Tensor, torch.Tensor]): The validation/test set.
@@ -212,8 +217,10 @@ class ReptileTrainer(ErankBaseTrainer):
             if mode == 'train':
                 loss, loss_dict = self._loss(ys_pred, ys, inner_model)  # use regularization
                 self._inner_train_step += 1
-            elif mode == 'val':
+            elif mode == 'val-noreg':
                 loss, loss_dict = self._loss(ys_pred, ys)  # no regularization
+            elif mode == 'val-reg':
+                loss, loss_dict = self._loss(ys_pred, ys, inner_model)  # use regularization
             else:
                 raise ValueError(f'Unsupported inner-loop learning mode: `{mode}`')
 
@@ -281,7 +288,7 @@ class ReptileTrainer(ErankBaseTrainer):
 
             # fine-tune model for `n_inner_iter steps` and evaluate during finetuning after some gradient steps
             inner_model, log_losses_inner_learning, log_losses_inner_eval, eval_predictions = self._inner_loop_learning(
-                'val', inner_model, support_set, query_set, eval_after_steps=self._inner_eval_after_steps)
+                self._val_mode, inner_model, support_set, query_set, eval_after_steps=self._inner_eval_after_steps)
 
             # track all logs
             losses_inner_eval[task.name] = log_losses_inner_eval
