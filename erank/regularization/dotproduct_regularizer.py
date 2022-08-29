@@ -51,6 +51,8 @@ class DotProductRegularizer(SubspaceRegularizer):
             if len(self.subspace_vec_buffer) < self.buffer_size:
                 return torch.tensor(0.0, dtype=torch.float32, device=self._device)
 
+        self._update_model_params_queue(model)
+
         # shape: (n_model_params,)
         optim_model_vec = self._construct_optim_model_vec(model=model, optim_model_vec_mode=self.optim_model_vec_mode)
 
