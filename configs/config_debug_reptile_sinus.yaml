@@ -95,11 +95,11 @@ config:
     log_plot_inner_learning_curves: true
 
     loss: mse
-    erank:
-    # TODO rename 'type' to init_type or so
-      type: buffer #weightsdiff #none #random #buffer
-      dir_buffer: null
-      erank_kwargs:
+    regularizer:
+      type: erank # dotprod # none
+      init_type: buffer #weightsdiff #random #buffer
+      init_dir_buffer: null
+      regularizer_kwargs:
         loss_coefficient: 1.0 #XXX
         buffer_size: ${config.trainer.task_batch_size} #10 # number of directions stored in the buffer
         buffer_mode: backlog # none, backlog, queue

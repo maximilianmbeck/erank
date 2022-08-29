@@ -13,9 +13,9 @@ from ml_utilities.trainers.basetrainer import BaseTrainer
 from ml_utilities.torch_utils.factory import create_optimizer_and_scheduler
 from ml_utilities.torch_utils.metrics import get_metric_collection
 from hydra.core.hydra_config import HydraConfig
+from erank.regularization import get_regularizer_class
 from erank.regularization.regularized_loss import RegularizedLoss
 from erank.regularization.subspace_regularizer import SubspaceRegularizer
-from erank.regularization.erank_regularizer import EffectiveRankRegularizer
 
 LOGGER = logging.getLogger(__name__)
 
@@ -76,32 +76,36 @@ class SubspaceBaseTrainer(BaseTrainer):
         loss_cls = get_loss(self.config.trainer.loss)
         loss_module = loss_cls(reduction='mean')
 
-        self._subspace_regularizer = self._create_erank_regularizer(self._model)
+        self._subspace_regularizer = self._create_subspace_regularizer(self._model)
         self._loss = RegularizedLoss(loss_module)
         if self._subspace_regularizer:
             self._loss.add_regularizer(self._subspace_regularizer)
 
-    def _create_erank_regularizer(self, model: nn.Module) -> EffectiveRankRegularizer:
-        erank_cfg = self.config.trainer.get('erank', None)
-        erank_reg = None
-        if erank_cfg is None or erank_cfg.type == 'none':
-            LOGGER.info('No erank regularizer.')
-        elif erank_cfg.type in ['random', 'weightsdiff', 'buffer']:
-            LOGGER.info(f'Erank regularization of type {erank_cfg.type}.')
-            erank_kwargs = erank_cfg.erank_kwargs
-            erank_reg = EffectiveRankRegularizer(init_model=model, device=self.device, **erank_kwargs)
-            if erank_cfg.type == 'random':
-                erank_reg.init_subspace_vecs(random_buffer=True)
-            elif erank_cfg.type == 'weightsdiff':
-                dir_buffer_path = erank_cfg.get('dir_buffer', None)
+    def _create_subspace_regularizer(self, model: nn.Module) -> SubspaceRegularizer:
+        subspace_reg_cfg = self.config.trainer.get('regularizer', None)
+        subspace_reg = None
+
+        if subspace_reg_cfg is None or subspace_reg_cfg.type == 'none':
+            LOGGER.info('No regularizer.')
+        elif subspace_reg_cfg.init_type in ['random', 'weightsdiff', 'buffer']:
+            LOGGER.info(f'Subspace regularizer: {subspace_reg_cfg.type}')
+            regularizer_cls = get_regularizer_class(subspace_reg_cfg.type)
+            regularizer_kwargs = subspace_reg_cfg.regularizer_kwargs
+            subspace_reg = regularizer_cls(init_model=model, device=self.device, **regularizer_kwargs)
+            
+            LOGGER.info(f'Subspace regularization of init_type {subspace_reg_cfg.init_type}.')
+            if subspace_reg_cfg.init_type == 'random':
+                subspace_reg.init_subspace_vecs(random_buffer=True)
+            elif subspace_reg_cfg.init_type == 'weightsdiff':
+                dir_buffer_path = subspace_reg_cfg.get('init_dir_buffer', None)
                 if dir_buffer_path is None:
-                    raise ValueError(f'Erank type is `weightsdiff`, but no buffer path is given!')
-                erank_reg.init_subspace_vecs(path_to_buffer_or_runs=dir_buffer_path)
-            elif erank_cfg.type == 'buffer':
+                    raise ValueError(f'Subspace init_type is `weightsdiff`, but no buffer path is given!')
+                subspace_reg.init_subspace_vecs(path_to_buffer_or_runs=dir_buffer_path)
+            elif subspace_reg_cfg.init_type == 'buffer':
                 pass # does nothing, buffer is filled during training
         else:
-            raise ValueError(f'Unknown erank type: {erank_cfg.type}')
-        return erank_reg
+            raise ValueError(f'Unknown regularizer type: {subspace_reg_cfg.init_type}')
+        return subspace_reg
 
     def _create_metrics(self) -> None:
         LOGGER.info('Creating metrics.')
