@@ -13,12 +13,14 @@ from ml_utilities.trainers.basetrainer import BaseTrainer
 from ml_utilities.torch_utils.factory import create_optimizer_and_scheduler
 from ml_utilities.torch_utils.metrics import get_metric_collection
 from hydra.core.hydra_config import HydraConfig
-from erank.regularization import EffectiveRankRegularizer, RegularizedLoss
+from erank.regularization.regularized_loss import RegularizedLoss
+from erank.regularization.subspace_regularizer import SubspaceRegularizer
+from erank.regularization.erank_regularizer import EffectiveRankRegularizer
 
 LOGGER = logging.getLogger(__name__)
 
 
-class ErankBaseTrainer(BaseTrainer):
+class SubspaceBaseTrainer(BaseTrainer):
     """Abstract trainer for this project. Collects all common functionalitites across trainers.
 
     Functionality is further specialized in child classes.
@@ -38,7 +40,7 @@ class ErankBaseTrainer(BaseTrainer):
                          save_every=config.trainer.save_every,
                          early_stopping_patience=config.trainer.early_stopping_patience)
         #
-        self._erank_regularizer: EffectiveRankRegularizer = None
+        self._subspace_regularizer: SubspaceRegularizer = None
         self._log_train_epoch_every = self.config.trainer.get('log_train_epoch_every', 1)
 
 
@@ -74,10 +76,10 @@ class ErankBaseTrainer(BaseTrainer):
         loss_cls = get_loss(self.config.trainer.loss)
         loss_module = loss_cls(reduction='mean')
 
-        self._erank_regularizer = self._create_erank_regularizer(self._model)
+        self._subspace_regularizer = self._create_erank_regularizer(self._model)
         self._loss = RegularizedLoss(loss_module)
-        if self._erank_regularizer:
-            self._loss.add_regularizer(self._erank_regularizer)
+        if self._subspace_regularizer:
+            self._loss.add_regularizer(self._subspace_regularizer)
 
     def _create_erank_regularizer(self, model: nn.Module) -> EffectiveRankRegularizer:
         erank_cfg = self.config.trainer.get('erank', None)

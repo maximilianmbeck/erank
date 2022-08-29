@@ -14,8 +14,8 @@ from tqdm import tqdm
 from omegaconf import DictConfig, ListConfig
 from erank.data import get_metadataset_class
 from erank.data.basemetadataset import support_query_as_minibatch
-from erank.regularization import LOG_LOSS_TOTAL_KEY
-from erank.trainer.erankbasetrainer import ErankBaseTrainer
+from erank.regularization.regularized_loss import LOG_LOSS_TOTAL_KEY
+from erank.trainer.subspacebasetrainer import SubspaceBaseTrainer
 from ml_utilities.utils import convert_dict_to_python_types, convert_listofdicts_to_dictoflists
 from ml_utilities.torch_utils.factory import create_optimizer_and_scheduler
 from ml_utilities.torch_utils import compute_grad_norm, compute_weight_norm
@@ -32,7 +32,7 @@ SAVEFNAME_LOSSES_INNER_AVG = 'epoch-{epoch}-task_avg_losses_inner.png'
 DPI = 150
 
 
-class ReptileTrainer(ErankBaseTrainer):
+class ReptileTrainer(SubspaceBaseTrainer):
 
     def __init__(self, config: DictConfig):
         super().__init__(config)
@@ -134,8 +134,8 @@ class ReptileTrainer(ErankBaseTrainer):
                     meta_model_param.grad.add_(g)
 
             #? ERANK: add to buffer
-            if self._erank_regularizer:
-                subspace_vec_norm = self._erank_regularizer.add_subspace_vec(inner_model)
+            if self._subspace_regularizer:
+                subspace_vec_norm = self._subspace_regularizer.add_subspace_vec(inner_model)
                 log_losses_inner_eval.update({'param_subspace_vec_norm': subspace_vec_norm})
 
             # track all logs
@@ -150,8 +150,8 @@ class ReptileTrainer(ErankBaseTrainer):
         self._train_step += 1
 
         #? ERANK: sets a reference to base model
-        if self._erank_regularizer:
-            self._erank_regularizer.set_base_model(self._model)
+        if self._subspace_regularizer:
+            self._subspace_regularizer.set_base_model(self._model)
 
         # log epoch
         if self._log_train_epoch_every > 0 and epoch % self._log_train_epoch_every == 0:
