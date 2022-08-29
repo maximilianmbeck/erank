@@ -7,8 +7,8 @@ hydra:
 #######
 run_config:
   exec_type: parallel # sequential
-  hostname: dragonfly
-  gpu_ids: [0, 1, 2, 3]
+  hostname: fox
+  gpu_ids: [0, 1]
   runs_per_gpu: 3 # runs need 1.5GB GPU memory
 
   wandb: # wandb config for run_handler, if "wandb: null" then logging to wandb is disabled for run_handler
@@ -41,7 +41,7 @@ config:
     entity: jkuiml-fsl # null
     project_name: erank_meta
     experiment_tag: "7.8"
-    experiment_name: sinus-${config.experiment_data.experiment_tag}.${start_num}-valdotproduct_backlog-loss_coeff-${config.trainer.regularizer.regularizer_kwargs.loss_coefficient}-outer_momemntum-${config.trainer.optimizer_scheduler.optimizer_kwargs.momentum}-task_bs-${config.trainer.task_batch_size}-inner_iter-${config.trainer.n_inner_iter}-reg-${config.trainer.regularizer.type}
+    experiment_name: sinus-${config.experiment_data.experiment_tag}.${start_num}-valdotproduct_backlog-loss_coeff-${config.trainer.regularizer.regularizer_kwargs.loss_coefficient}-outer_momentum-${config.trainer.optimizer_scheduler.optimizer_kwargs.momentum}-task_bs-${config.trainer.task_batch_size}-inner_iter-${config.trainer.n_inner_iter}-reg-${config.trainer.regularizer.type}
     experiment_dir: null
     seed: 0
     hostname: null # the server on which the run is run, will be filled by run_handler
