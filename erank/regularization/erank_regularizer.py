@@ -49,7 +49,7 @@ class EffectiveRankRegularizer(SubspaceRegularizer):
                          optim_model_vec_mode=optim_model_vec_mode,
                          subspace_vecs_mode=subspace_vecs_mode,
                          track_last_n_model_steps=track_last_n_model_steps,
-                         normalize_dir_matrix_m=normalize_dir_matrix_m, 
+                         normalize_dir_matrix_m=normalize_dir_matrix_m,
                          loss_coefficient_learnable=loss_coefficient_learnable)
 
         self._epsilon_origin_std = epsilon_origin_std
@@ -66,22 +66,8 @@ class EffectiveRankRegularizer(SubspaceRegularizer):
                                        normalize_matrix: bool) -> torch.Tensor:
         """Constructs the directions matrix M (which is used to calculate the erank). 
         Each row contains the parameters of a (pretrained) model flattened as a vector."""
-        # compute model vector for optimization
-        model_vec = nn.utils.parameters_to_vector(model.parameters())  # not detached!
 
-        if torch.isinf(model_vec).any() or torch.isnan(model_vec).any():
-            LOGGER.warning(
-                f'Model parameter vector of size {len(model_vec)} contains {torch.isinf(model_vec).sum()} infinite and {torch.isnan(model_vec).sum()} NaN values.'
-            )
-
-        if optim_model_vec_mode == 'abs':
-            optim_model_vec = model_vec
-        elif optim_model_vec_mode == 'initdiff':
-            optim_model_vec = model_vec - self._init_model
-        elif optim_model_vec_mode == 'stepdiff':
-            optim_model_vec = model_vec - self._model_params_queue[-2]
-        elif optim_model_vec_mode == 'basediff':
-            optim_model_vec = model_vec - self._base_model_vec
+        optim_model_vec = self._construct_optim_model_vec(model=model, optim_model_vec_mode=optim_model_vec_mode)
 
         # avoid numeric instabilities, when evaluating erank gradient
         if torch.linalg.norm(optim_model_vec, ord=2, dim=0) < self._min_optim_vec_norm:

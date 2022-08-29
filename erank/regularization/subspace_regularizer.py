@@ -160,7 +160,6 @@ class SubspaceRegularizer(Regularizer):
         `buffer_mode`='backlog': Add a new model vector to `subspace_vec_backlog`. If backlog buffer is full, 
                                  buffer content is moved to `_subspace_vecs` and buffer is cleared.
         `buffer_mode`='queue': Add a new model vector to `subspace_vec_queue`
-        TODO check if tensors must be moved to cpu memory
 
         Args:
             model (nn.Module): The model to add.
@@ -212,6 +211,26 @@ class SubspaceRegularizer(Regularizer):
                 f'Wrong shape of new subspace vectors! Previous shape: {self._subspace_vecs.shape}, New (wrong) shape: {new_subspace_vecs.shape}'
             )
         return new_subspace_vecs
+    
+    def _construct_optim_model_vec(self, model: nn.Module, optim_model_vec_mode: bool) -> torch.Tensor:
+        # compute model vector for optimization
+        model_vec = nn.utils.parameters_to_vector(model.parameters())  # not detached!
+
+        if torch.isinf(model_vec).any() or torch.isnan(model_vec).any():
+            LOGGER.warning(
+                f'Model parameter vector of size {len(model_vec)} contains {torch.isinf(model_vec).sum()} infinite and {torch.isnan(model_vec).sum()} NaN values.'
+            )
+
+        if optim_model_vec_mode == 'abs':
+            optim_model_vec = model_vec
+        elif optim_model_vec_mode == 'initdiff':
+            optim_model_vec = model_vec - self._init_model
+        elif optim_model_vec_mode == 'stepdiff':
+            optim_model_vec = model_vec - self._model_params_queue[-2]
+        elif optim_model_vec_mode == 'basediff':
+            optim_model_vec = model_vec - self._base_model_vec
+
+        return optim_model_vec
 
     def set_base_model(self, model: nn.Module) -> None:
         """Resets the internal base model vector, which is used to construct directions.

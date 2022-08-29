@@ -1,8 +1,9 @@
 from typing import Type
 from erank.regularization.base_regularizer import Regularizer
+from erank.regularization.dotproduct_regularizer import DotProductRegularizer
 from erank.regularization.erank_regularizer import EffectiveRankRegularizer
 
-_regularizer_registry = {'erank': EffectiveRankRegularizer, 'dotproduct': None}
+_regularizer_registry = {'erank': EffectiveRankRegularizer, 'dotproduct': DotProductRegularizer}
 
 
 def get_regularizer_class(regularizer_type: str) -> Type[Regularizer]:

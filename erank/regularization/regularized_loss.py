@@ -1,11 +1,7 @@
 import torch
 import logging
-from abc import ABC, abstractmethod
-from collections import deque
-from pathlib import Path
-from typing import Deque, Dict, List, Tuple
+from typing import Dict, Tuple
 from torch import nn
-from erank.utils import load_directions_matrix_from_task_sweep
 
 from erank.regularization.base_regularizer import Regularizer
 
