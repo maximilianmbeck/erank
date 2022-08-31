@@ -1,5 +1,7 @@
+from typing import Dict, Union
 import torch
 import logging
+import numpy as np
 from torch import nn
 
 from erank.regularization.subspace_regularizer import SubspaceRegularizer
@@ -103,26 +105,7 @@ class EffectiveRankRegularizer(SubspaceRegularizer):
         self._update_model_params_queue(model)
         directions_matrix = self._construct_directions_matrix_m(model, self.optim_model_vec_mode,
                                                                 self.normalize_dir_matrix_m)
-        return EffectiveRankRegularizer.erank(directions_matrix)
+        return SubspaceRegularizer.erank(directions_matrix)
 
-    @staticmethod
-    def erank(matrix_A: torch.Tensor, center_matrix_A: bool = False) -> torch.Tensor:
-        """Calculates the effective rank of a matrix.
-
-        Args:
-            matrix_A (torch.Tensor): Matrix of shape m x n. 
-            center_matrix_A (bool): Center the matrix 
-
-        Returns:
-            torch.Tensor: Effective rank of matrix_A
-        """
-        assert matrix_A.ndim == 2
-        # pca_lowrank causes numerical issues when evaluated near the origin
-        # _, s, _ = torch.pca_lowrank(matrix_A,
-        #                             center=center_matrix_A,
-        #                             niter=1,
-        #                             q=min(matrix_A.shape[0], matrix_A.shape[1]))  # TODO check with torch doc.
-        _, s, _ = torch.linalg.svd(matrix_A, full_matrices=False)
-
-        # normalizes input s -> scale independent!
-        return torch.exp(torch.distributions.Categorical(probs=s).entropy())
+    def get_additional_logs(self) -> Dict[str, Union[float, np.ndarray, torch.Tensor]]:
+        return super().get_additional_logs()

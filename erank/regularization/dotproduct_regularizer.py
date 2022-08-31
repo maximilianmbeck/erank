@@ -1,4 +1,6 @@
+from typing import Dict, Union
 import torch
+import numpy as np
 from torch import nn
 from erank.regularization.subspace_regularizer import SubspaceRegularizer
 
@@ -37,7 +39,7 @@ class DotProductRegularizer(SubspaceRegularizer):
             self._subspace_vecs.data = self._create_subspace_vecs_from_buffer(self.subspace_vec_buffer)
         
         #! Variant 1: first normalize then average
-        # this might "upweight" unimportant directions
+        # Problem: this might "upweight" unimportant directions
         # subspace_vecs_normalized = self._subspace_vecs / torch.linalg.norm(
         #     self._subspace_vecs, ord=2, dim=1, keepdim=True)
         # mean_subspace_vec_normalized = subspace_vecs_normalized.mean(dim=0)  # shape: (n_model_params,)
@@ -67,3 +69,6 @@ class DotProductRegularizer(SubspaceRegularizer):
 
         # calculate dotproduct regularization term, negative since we want to maximize dotproduct, align vectors more
         return -torch.dot(optim_model_vec, mean_subspace_vec)
+
+    def get_additional_logs(self) -> Dict[str, Union[float, np.ndarray, torch.Tensor]]:
+        return super().get_additional_logs()

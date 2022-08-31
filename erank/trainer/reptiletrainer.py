@@ -133,7 +133,7 @@ class ReptileTrainer(SubspaceBaseTrainer):
                 else:
                     meta_model_param.grad.add_(g)
 
-            #? ERANK: add to buffer
+            #? Subspace reg: add to buffer
             if self._subspace_regularizer:
                 subspace_vec_norm = self._subspace_regularizer.add_subspace_vec(inner_model)
                 log_losses_inner_eval.update({'param_subspace_vec_norm': subspace_vec_norm})
@@ -142,8 +142,14 @@ class ReptileTrainer(SubspaceBaseTrainer):
             losses_inner_learning[task.name] = log_losses_inner_learning
             losses_inner_eval[task.name] = log_losses_inner_eval
 
+        # log epoch stats
+        if self._log_train_epoch_every > 0 and epoch % self._log_train_epoch_every == 0:
+            epoch_stats['meta-grad-norm'] = compute_grad_norm(self._model)
+            if self._subspace_regularizer:
+                additional_logs = self._subspace_regularizer.get_additional_logs()
+                epoch_stats.update(additional_logs)
+
         #! meta-model gradient step
-        epoch_stats['meta-grad-norm'] = compute_grad_norm(self._model)
         # outer loop step / update meta-parameters
         self._optimizer.step()
         self._optimizer.zero_grad()

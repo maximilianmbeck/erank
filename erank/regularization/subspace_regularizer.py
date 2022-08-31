@@ -1,9 +1,10 @@
 import torch
 import logging
+import numpy as np
 from abc import abstractmethod
 from collections import deque
 from pathlib import Path
-from typing import Deque
+from typing import Deque, Dict, Union
 from torch import nn
 from erank.utils import load_directions_matrix_from_task_sweep
 
@@ -271,4 +272,52 @@ class SubspaceRegularizer(Regularizer):
     def forward(self, model: nn.Module) -> torch.Tensor:
         pass
 
-    # TODO add function: `get_additional_logs() -> Dict[str, Union[float, np.ndarray, torch.Tensor]]`
+    @abstractmethod
+    def get_additional_logs(self) -> Dict[str, Union[float, np.ndarray, torch.Tensor]]:
+        """Return additional log values. 
+
+        Returns:
+            Dict[str, Union[float, np.ndarray, torch.Tensor]]: The dict containing additional log values.
+        """
+        log_dict = {}
+
+        if self.buffer_mode == 'backlog':
+            if self._subspace_vecs.shape[0] < self.buffer_size:
+                return torch.tensor(0.0, dtype=torch.float32, device=self._device)
+        elif self.buffer_mode == 'queue':
+            if len(self.subspace_vec_buffer) < self.buffer_size:
+                return torch.tensor(0.0, dtype=torch.float32, device=self._device)
+        
+        # get subspace vecs
+        if self.buffer_mode == 'queue':
+            subspace_vecs = self._create_subspace_vecs_from_buffer(self.subspace_vec_buffer)
+        elif self.buffer_mode == 'backlog':
+            subspace_vecs = self._subspace_vecs.data 
+
+        log_dict['subspace_erank'] = SubspaceRegularizer.erank(subspace_vecs)
+        return log_dict
+
+    @staticmethod
+    def erank(matrix_A: torch.Tensor, center_matrix_A: bool = False) -> torch.Tensor:
+        """Calculates the effective rank of a matrix.
+
+        Args:
+            matrix_A (torch.Tensor): Matrix of shape m x n. 
+            center_matrix_A (bool): Center the matrix 
+
+        Returns:
+            torch.Tensor: Effective rank of matrix_A
+        """
+        assert matrix_A.ndim == 2
+        # pca_lowrank causes numerical issues when evaluated near the origin
+        # _, s, _ = torch.pca_lowrank(matrix_A,
+        #                             center=center_matrix_A,
+        #                             niter=1,
+        #                             q=min(matrix_A.shape[0], matrix_A.shape[1]))  # check with torch doc.
+        _, s, _ = torch.linalg.svd(matrix_A, full_matrices=False)
+
+        # normalizes input s -> scale independent!
+        return torch.exp(torch.distributions.Categorical(probs=s).entropy())
+        
+        
+        
