@@ -27,7 +27,7 @@ class RegularizedLoss(nn.Module):
             LOGGER.warning(
                 f'{LOG_LOSS_PREFIX}_{self.loss_module.__class__.__name__} is Inf or NaN! Inf: {torch.isinf(loss)} | NaN: {torch.isnan(loss)}'
             )
-        loss_dict[f'{LOG_LOSS_PREFIX}_{self.loss_module.__class__.__name__}'] = loss
+        loss_dict[f'{LOG_LOSS_PREFIX}_{self.loss_module.__class__.__name__}'] = loss.clone()
         loss_total = loss
         if not model is None:
             for reg_name, reg in self._regularizers.items():
