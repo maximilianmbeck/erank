@@ -110,7 +110,7 @@ config:
     metrics:
       - MeanSquaredError
     num_workers: 4
-    verbose: True #True
+    verbose: False #True
 
   data: 
     metadataset: sinus
@@ -122,7 +122,7 @@ config:
       phase_range: [0, 6.283185307]
       x_range: [-5, 5]
       regenerate_task_support_set: False
-      seed: 0 # this seed is only used for task generation
+      seed: ${config.experiment_data.seed}
     val_metadataset_kwargs:
       support_size: 10
       query_size: 50
