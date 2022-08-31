@@ -31,9 +31,9 @@ sweep:
     - parameter: trainer.n_inner_iter
       vals: [100] #[10, 30, 100]
     - parameter: trainer.optimizer_scheduler.optimizer_kwargs.momentum
-      vals: [0.0, 0.0001, 0.001, 0.01, 0.1, 0.5, 1.0, 3.0, 10.0, 50, 100] #[0.0, 0.01, 0.1]
+      vals: [0.0, 0.0001, 0.001, 0.01, 0.1, 0.5, 1.0, 3.0, 10.0] #[0.0, 0.01, 0.1]
 
-start_num: 0 # use this to count how often this config is run
+start_num: 1 # use this to count how often this config is run
 
 ###
 config:
