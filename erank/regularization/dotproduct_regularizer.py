@@ -35,10 +35,17 @@ class DotProductRegularizer(SubspaceRegularizer):
         # update subspace vecs
         if self.buffer_mode == 'queue':
             self._subspace_vecs.data = self._create_subspace_vecs_from_buffer(self.subspace_vec_buffer)
+        
+        #! Variant 1: first normalize then average
+        # this might "upweight" unimportant directions
+        # subspace_vecs_normalized = self._subspace_vecs / torch.linalg.norm(
+        #     self._subspace_vecs, ord=2, dim=1, keepdim=True)
+        # mean_subspace_vec_normalized = subspace_vecs_normalized.mean(dim=0)  # shape: (n_model_params,)
+        
+        #! Variant 2: first average then normalize
+        mean_subspace_vec = self._subspace_vecs.mean(dim=0)
+        mean_subspace_vec_normalized = mean_subspace_vec / torch.linalg.norm(mean_subspace_vec, ord=2, dim=0, keepdim=True)
 
-        subspace_vecs_normalized = self._subspace_vecs / torch.linalg.norm(
-            self._subspace_vecs, ord=2, dim=1, keepdim=True)
-        mean_subspace_vec_normalized = subspace_vecs_normalized.mean(dim=0)  # shape: (n_model_params,)
         return mean_subspace_vec_normalized
 
     def forward(self, model: nn.Module) -> torch.Tensor:
