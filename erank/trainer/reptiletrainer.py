@@ -418,6 +418,7 @@ class ReptileTrainer(SubspaceBaseTrainer):
         losses_epoch = dict(inner_train_step=self._inner_train_step,
                             **log_dict_losses_eval,
                             **log_dict_losses_inner_learning)
+        losses_epoch.update({'time_last_val_epoch_in_s': self._time_last_val_epoch})        
         self._log_losses_metrics(prefix='val', epoch=epoch, losses_epoch=losses_epoch)
         self._log_losses_metrics(prefix='preds', epoch=epoch, metrics_epoch=preds_plot_log, log_to_console=False)
         self._log_losses_metrics(prefix='val-inner',

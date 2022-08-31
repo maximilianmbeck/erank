@@ -119,6 +119,7 @@ class SubspaceBaseTrainer(BaseTrainer):
                             losses_epoch: Dict[str, Union[List[float], float]] = {},
                             metrics_epoch: Dict[str, Union[float, torch.Tensor]] = {}) -> None:
         if self._log_train_epoch_every > 0 and epoch % self._log_train_epoch_every == 0:
+            losses_epoch.update({'time_last_train_epoch_in_s': self._time_last_train_epoch})        
             self._log_losses_metrics('train', epoch, losses_epoch, metrics_epoch)
             self._reset_metrics()
 
@@ -126,6 +127,7 @@ class SubspaceBaseTrainer(BaseTrainer):
                           epoch: int,
                           losses_epoch: Dict[str, Union[List[float], float]] = {},
                           metrics_epoch: Dict[str, Union[float, torch.Tensor]] = {}) -> float:
+        losses_epoch.update({'time_last_val_epoch_in_s': self._time_last_val_epoch})        
         self._log_losses_metrics('val', epoch, losses_epoch, metrics_epoch)
 
         # val_score is first metric in self._val_metrics
