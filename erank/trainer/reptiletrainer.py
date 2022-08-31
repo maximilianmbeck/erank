@@ -450,7 +450,10 @@ class ReptileTrainer(SubspaceBaseTrainer):
         inner_loss_plots: Dict[str, Figure] = {}
         inner_loss_values: Dict[str, List[float]] = {}
 
-        for loss_key_to_plot in loss_keys_to_plot:
+        for loss_key_to_plot_ in loss_keys_to_plot:
+            assert isinstance(loss_key_to_plot_, DictConfig), f'Loss key to plot is not specified correctly! Specify as `loss_key: XXX`.'
+            loss_key_to_plot = loss_key_to_plot_['loss_key']
+
 
             # labels for plots
             y_label = f'inner-{loss_key_to_plot}'
@@ -467,28 +470,36 @@ class ReptileTrainer(SubspaceBaseTrainer):
             loss_taskmean = pd.DataFrame(inner_loss_values).mean(axis=1).to_numpy()
             loss_taskstd = pd.DataFrame(inner_loss_values).std(axis=1).to_numpy()
             if loss_key_to_plot not in self.__inner_learning_curves_ylim:
-                # for positive initial loss (i.e. loss_taskmean[0]):
-                # ylim upper = very first loss + 2*std and assume loss is decreasing
-                # for negative initial loss:
-                # ylim upper and lower = very first loss + 4*std and assume loss is increasing
-                if loss_taskmean[0] > 0.:
-                    lim_type = 'u'  # upper limit only
-                    self.__inner_learning_curves_ylim[loss_key_to_plot] = (lim_type,
-                                                                           loss_taskmean[0] + 2 * loss_taskstd[0])
+                if 'ylimits' in loss_key_to_plot_:
+                    lim_type = 'ul'
+                    ylimits = loss_key_to_plot_['ylimits']
+                    assert len(ylimits) == 2
+                    ylim_tuple = (lim_type, ylimits[0], ylimits[1])
+                    self.__inner_learning_curves_ylim[loss_key_to_plot] = ylim_tuple
                 else:
-                    lim_type = 'ul'  # upper and lower limit
-                    self.__inner_learning_curves_ylim[loss_key_to_plot] = (lim_type, np.abs(loss_taskmean[0]) +
+                    # for positive initial loss (i.e. loss_taskmean[0]):
+                    # ylim upper = very first loss + 2*std and assume loss is decreasing
+                    # for negative initial loss:
+                    # ylim upper and lower = very first loss + 4*std and assume loss is increasing
+                    if loss_taskmean[0] > 0.:
+                        lim_type = 'u'  # upper limit only
+                        self.__inner_learning_curves_ylim[loss_key_to_plot] = (lim_type,
+                                                                               loss_taskmean[0] + 2 * loss_taskstd[0])
+                    else:
+                        lim_type = 'ul'  # upper and lower limit
+                        self.__inner_learning_curves_ylim[loss_key_to_plot] = (lim_type, np.abs(loss_taskmean[0]) +
                                                                            10 * loss_taskstd[0])
-
-            (lim_type, ylim) = self.__inner_learning_curves_ylim[loss_key_to_plot]
+            # (lim_type, lower, [upper]), upper is optional
+            ylim_tuple = self.__inner_learning_curves_ylim[loss_key_to_plot]
+            lim_type = ylim_tuple[0]
             if lim_type == 'u':
-                ylim_upper = ylim
+                ylim_upper = ylim_tuple[1]
                 ylim_lower = 0.
             elif lim_type == 'ul':
-                ylim_upper = ylim
-                ylim_lower = -ylim
+                ylim_lower = ylim_tuple[1]
+                ylim_upper = ylim_tuple[2]
             elif lim_type == 'l':
-                ylim_lower = -ylim
+                ylim_lower = ylim_tuple[1]
                 ylim_upper = 0.
             else:
                 raise ValueError(f'Unsupported lim_type: {lim_type}')
