@@ -454,7 +454,6 @@ class ReptileTrainer(SubspaceBaseTrainer):
             assert isinstance(loss_key_to_plot_, DictConfig), f'Loss key to plot is not specified correctly! Specify as `loss_key: XXX`.'
             loss_key_to_plot = loss_key_to_plot_['loss_key']
 
-
             # labels for plots
             y_label = f'inner-{loss_key_to_plot}'
             x_label = 'inner-steps'
