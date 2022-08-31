@@ -10,14 +10,14 @@ from torch import nn
 from omegaconf import DictConfig
 
 from ml_utilities.torch_utils.metrics import EntropyCategorical, MaxClassProbCategorical
-from erank.trainer.erankbasetrainer import ErankBaseTrainer
+from erank.trainer.subspacebasetrainer import SubspaceBaseTrainer
 from erank.data import get_dataset_provider
 from erank.data.data_utils import random_split_train_tasks
 
 LOGGER = logging.getLogger(__name__)
 
 
-class SupervisedTrainer(ErankBaseTrainer):
+class SupervisedTrainer(SubspaceBaseTrainer):
     """Class for training in a supervised setting.
 
     Args:
@@ -63,7 +63,7 @@ class SupervisedTrainer(ErankBaseTrainer):
     def _train_epoch(self, epoch: int) -> None:
         # setup logging
         losses_epoch = dict(loss_total=[], loss_ce=[])
-        if self._erank_regularizer is not None:
+        if self._subspace_regularizer is not None:
             losses_epoch.update(dict(loss_erank=[]))
 
         # training loop (iterations per epoch)
@@ -78,9 +78,9 @@ class SupervisedTrainer(ErankBaseTrainer):
             # add erank regularizer
             loss_reg = torch.tensor(0.0).to(loss)
             loss_weight = 0.0
-            if self._erank_regularizer is not None:
-                loss_reg = self._erank_regularizer.forward(self._model)
-                loss_weight = self._erank_regularizer.loss_coefficient
+            if self._subspace_regularizer is not None:
+                loss_reg = self._subspace_regularizer.forward(self._model)
+                loss_weight = self._subspace_regularizer.loss_coefficient
 
             loss_total = loss + loss_weight * loss_reg
 
@@ -91,12 +91,12 @@ class SupervisedTrainer(ErankBaseTrainer):
             self._train_step += 1
 
             # update regularizer
-            if self._erank_regularizer is not None:
-                self._erank_regularizer.update_delta_start_params(self._model)
+            if self._subspace_regularizer is not None:
+                self._subspace_regularizer.update_delta_start_params(self._model)
 
             # metrics & logging
             losses_step = dict(loss_total=loss_total.item(), loss_ce=loss.item())
-            if self._erank_regularizer is not None:
+            if self._subspace_regularizer is not None:
                 losses_step.update(dict(loss_erank=loss_reg.item()))
             with torch.no_grad():
                 metric_vals = self._train_metrics(y_pred, ys)
@@ -127,13 +127,13 @@ class SupervisedTrainer(ErankBaseTrainer):
         log_dict = {'weight_norm': model_param_norm}
 
         # length of optimizer step
-        if self._erank_regularizer is not None:
-            model_step_len = self._erank_regularizer.get_param_step_len()
+        if self._subspace_regularizer is not None:
+            model_step_len = self._subspace_regularizer.get_param_step_len()
             log_dict.update({'optim_step_len': model_step_len})
 
             # erank of normalized models
             if self.config.trainer.erank.get('log_normalized_erank', False):
-                normalized_erank = self._erank_regularizer.get_normalized_erank()
+                normalized_erank = self._subspace_regularizer.get_normalized_erank()
                 log_dict.update({'normalized_erank': normalized_erank})
 
         return log_dict

@@ -19,8 +19,9 @@ class SinusTask(Task):
                  amplitude: float,
                  phase: float,
                  x_range: List[float],
+                 rng: np.random.Generator = None,
                  regenerate_support_set: bool = False):
-        super().__init__()
+        super().__init__(rng=rng)
         self._support_size = support_size
         self._query_size = query_size
         self.amplitude = amplitude
@@ -37,8 +38,7 @@ class SinusTask(Task):
 
     def _generate_support_set(self) -> None:
         # uniform sampling of the support set
-        support_x = torch.as_tensor(np.random.default_rng().uniform(self.x_range[0], self.x_range[1],
-                                                                    (self._support_size, 1)),
+        support_x = torch.as_tensor(self._rng.uniform(self.x_range[0], self.x_range[1], (self._support_size, 1)),
                                     dtype=torch.float32)
         self._support_data[SUPPORT_Y_KEY] = self.sinus_func(support_x)
         self._support_data[SUPPORT_X_KEY] = support_x
@@ -53,10 +53,14 @@ class SinusTask(Task):
         return self.amplitude * torch.sin(x + self.phase)
 
     def plot_query_predictions(self, epoch: int, preds: Dict[int, torch.Tensor]) -> Tuple[Figure, str]:
-        fig, ax = plt.subplots(1,1)
+        fig, ax = plt.subplots(1, 1)
         ax.plot(to_ndarray(self.query_set[0]), to_ndarray(self.query_set[1]), color='red', label='Ground truth')
         # use direct access to _support_data dict to avoid regenerating if `regenerate_support_set` is true
-        ax.plot(to_ndarray(self._support_data[SUPPORT_X_KEY]), to_ndarray(self._support_data[SUPPORT_Y_KEY]), 'o', color='black', label='Support samples')
+        ax.plot(to_ndarray(self._support_data[SUPPORT_X_KEY]),
+                to_ndarray(self._support_data[SUPPORT_Y_KEY]),
+                'o',
+                color='black',
+                label='Support samples')
         for step, pred in preds.items():
             ax.plot(to_ndarray(self.query_set[0]), to_ndarray(pred), label=f'preds after {step} steps')
         ax.legend()
@@ -75,25 +79,25 @@ class SinusTask(Task):
 
 class SinusDataset(BaseMetaDataset):
 
-    def __init__(self,
-                 support_size: int = 10,
-                 query_size: int = 10,
-                 num_tasks: int = 10000,
-                 amplitude_range: List[float] = [0.1, 5.0],
-                 phase_range: List[float] = [0, 2 * 3.14159265359],
-                 x_range: List[float] = [-5, 5],
-                 regenerate_task_support_set: bool = False, # regenerate support set on each call
-                 seed: int = 0): # seed only used for task generation
-        super().__init__(support_size=support_size, query_size=query_size, num_tasks=num_tasks)
+    def __init__(
+        self,
+        support_size: int = 10,
+        query_size: int = 10,
+        num_tasks: int = 10000,
+        amplitude_range: List[float] = [0.1, 5.0],
+        phase_range: List[float] = [0, 2 * 3.14159265359],
+        x_range: List[float] = [-5, 5],
+        regenerate_task_support_set: bool = False,  # regenerate support set on each call
+        seed: int = 0):  # seed used for task generation, support and query samples
+        super().__init__(support_size=support_size, query_size=query_size, num_tasks=num_tasks, seed=seed)
         assert len(amplitude_range) == 2 and len(phase_range) == 2 and len(x_range) == 2
-        rng = np.random.default_rng(seed=seed)
-        self.amplitudes = rng.uniform(amplitude_range[0], amplitude_range[1], size=num_tasks)
-        self.phases = rng.uniform(phase_range[0], phase_range[1], size=num_tasks)
+        self.amplitudes = self._rng.uniform(amplitude_range[0], amplitude_range[1], size=num_tasks)
+        self.phases = self._rng.uniform(phase_range[0], phase_range[1], size=num_tasks)
         self.x_range = x_range
         self.regenerate_task_support_set = regenerate_task_support_set
         # generate all tasks an hold them in memory
-        self.tasks : np.ndarray = None
-        self.task_name_to_index : Dict[str, int] = None
+        self.tasks: np.ndarray = None
+        self.task_name_to_index: Dict[str, int] = None
         self.tasks, self.task_name_to_index = self._generate_tasks()
 
     def _generate_tasks(self) -> Tuple[np.ndarray, Dict[str, int]]:
@@ -107,16 +111,16 @@ class SinusDataset(BaseMetaDataset):
                           self.amplitudes[i],
                           self.phases[i],
                           self.x_range,
+                          self._rng,
                           regenerate_support_set=self.regenerate_task_support_set))
             tasks.append(task)
             name_to_index[task.name] = i
         return np.array(tasks), name_to_index
 
     def sample_tasks(self, num_tasks: int) -> List[SinusTask]:
-        # task_idxes = np.random.default_rng().integers(len(self.tasks), size=num_tasks)
         if num_tasks == -1:
             num_tasks = len(self.tasks)
-        return np.random.default_rng().choice(self.tasks, size=num_tasks, replace=False).tolist()
+        return self._rng.choice(self.tasks, size=num_tasks, replace=False).tolist()
 
     def get_tasks(self, num_tasks: int = -1) -> List[Task]:
         if num_tasks == -1:

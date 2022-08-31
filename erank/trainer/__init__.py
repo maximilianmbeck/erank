@@ -1,15 +1,13 @@
-from typing import Callable, Type
-from omegaconf import DictConfig
-import torch.utils.data as data
+from typing import Type
 from erank.trainer.reptiletrainer import ReptileTrainer
-from erank.trainer.erankbasetrainer import ErankBaseTrainer
+from erank.trainer.subspacebasetrainer import SubspaceBaseTrainer
 
 from erank.trainer.supervisedtrainer import SupervisedTrainer
 
 
 _trainer_registry = {'supervised': SupervisedTrainer, 'reptile': ReptileTrainer}
 
-def get_trainer_class(training_setup: str) -> Type[ErankBaseTrainer]:
+def get_trainer_class(training_setup: str) -> Type[SubspaceBaseTrainer]:
     if training_setup in _trainer_registry:
         return _trainer_registry[training_setup]
     else:

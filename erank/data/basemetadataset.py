@@ -1,7 +1,8 @@
 import sys
+import torch
+import numpy as np
 from abc import ABC, abstractmethod
 from typing import Dict, List, Tuple
-import torch
 from torch.utils.data import IterableDataset
 from matplotlib.figure import Figure
 
@@ -30,7 +31,8 @@ def support_query_as_minibatch(set: Tuple[torch.Tensor, torch.Tensor],
 
 class Task(ABC):
 
-    def __init__(self, support_set: Dict[str, torch.Tensor] = {}, query_set: Dict[str, torch.Tensor] = {}):
+    def __init__(self, support_set: Dict[str, torch.Tensor] = {}, query_set: Dict[str, torch.Tensor] = {}, rng: np.random.Generator = None):
+        self._rng = rng
         # Tensors must have batch dimension
         self._support_data = support_set
         self._query_data = query_set
@@ -79,11 +81,13 @@ class BaseMetaDataset(ABC, IterableDataset):
 
     """
 
-    def __init__(self, support_size: int, query_size: int, num_tasks: int = -1):
+    def __init__(self, support_size: int, query_size: int, num_tasks: int = -1, seed: int = None):
         # num_tasks -1 means infinite / specified by dataset
         self.num_tasks = num_tasks
         self.support_size = support_size
         self.query_size = query_size
+        self._rng = np.random.default_rng(seed=seed)
+
 
     @abstractmethod
     def sample_tasks(self, num_tasks: int = -1) -> List[Task]:

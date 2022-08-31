@@ -5,51 +5,23 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "run.py default",
+            "name": "run.py reptile erank local",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/run.py",
-            "args": ["--config-name", "config_debug.yaml"],
+            "args": ["--config-name", "config_debug_reptile_sinus_erank.yaml"],
             "console": "integratedTerminal",
             "justMyCode": false
         },
         {
-            "name": "run.py default local",
+            "name": "run.py reptile dotproduct local",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/run.py",
-            "args": ["--config-name", "config_debug_local.yaml"],
+            "args": ["--config-name", "config_debug_reptile_sinus_dotproduct.yaml"],
             "console": "integratedTerminal",
             "justMyCode": false
         },
-        {
-            "name": "run.py reptile local",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceFolder}/run.py",
-            "args": ["--config-name", "config_debug_reptile_sinus.yaml"],
-            "console": "integratedTerminal",
-            "justMyCode": false
-        },
-        {
-            "name": "run_sweep.py reptile",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceFolder}/run_sweep.py",
-            "args": ["--config-name", "config_debug_sweep_reptile.yaml"],
-            "console": "integratedTerminal",
-            "justMyCode": false
-        },
-        {
-            "name": "run_sweep.py default",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceFolder}/run_sweep.py",
-            "args": ["--config-name", "config_debug_sweep.yaml"],
-            "console": "integratedTerminal",
-            "justMyCode": false
-        },
-
         {
             "name": "Python: Current File",
             "type": "python",
