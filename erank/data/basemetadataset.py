@@ -1,10 +1,13 @@
 import sys
 import torch
+import logging
 import numpy as np
 from abc import ABC, abstractmethod
-from typing import Dict, List, Tuple
-from torch.utils.data import IterableDataset
+from typing import Dict, List, Tuple, Union
+from torch.utils.data import IterableDataset, get_worker_info
 from matplotlib.figure import Figure
+
+LOGGER = logging.getLogger(__name__)
 
 SUPPORT_X_KEY = QUERY_X_KEY = 'x'
 SUPPORT_Y_KEY = QUERY_Y_KEY = 'y'
@@ -31,7 +34,10 @@ def support_query_as_minibatch(set: Tuple[torch.Tensor, torch.Tensor],
 
 class Task(ABC):
 
-    def __init__(self, support_set: Dict[str, torch.Tensor] = {}, query_set: Dict[str, torch.Tensor] = {}, rng: np.random.Generator = None):
+    def __init__(self,
+                 support_set: Dict[str, Union[torch.Tensor, np.ndarray]] = {},
+                 query_set: Dict[str, Union[torch.Tensor, np.ndarray]] = {},
+                 rng: np.random.Generator = None):
         self._rng = rng
         # Tensors must have batch dimension
         self._support_data = support_set
@@ -77,17 +83,23 @@ class Task(ABC):
 
 class BaseMetaDataset(ABC, IterableDataset):
     """
-    TODO take care of normalization of inputs
-
+    Baseclass for a Metadataset.
     """
 
-    def __init__(self, support_size: int, query_size: int, num_tasks: int = -1, seed: int = None):
+    def __init__(self,
+                 support_size: int,
+                 query_size: int,
+                 num_tasks: int = -1,
+                 seed: int = None,
+                 normalizer: Dict[str, List[float]] = None):
         # num_tasks -1 means infinite / specified by dataset
         self.num_tasks = num_tasks
         self.support_size = support_size
         self.query_size = query_size
-        self._rng = np.random.default_rng(seed=seed)
-
+        self.normalizer = normalizer
+        self._seed = seed
+        self._rng: np.random.Generator = None
+        self.reset_rng(seed=seed)
 
     @abstractmethod
     def sample_tasks(self, num_tasks: int = -1) -> List[Task]:
@@ -126,8 +138,22 @@ class BaseMetaDataset(ABC, IterableDataset):
             Task: The task.
         """
         pass
-    
+
+    def reset_rng(self, seed: int) -> None:
+        self._rng = np.random.default_rng(seed=seed)
+
     def __iter__(self):
+        #* init worker
+        # reset random number generater here, such that we get a different task order in each worker process
+        # Result: every worker draws different task order. (Otherwise every task will be sampled four times.)
+        # worker_info object contains worker attributes, when called in a worker. None otherwise.
+        worker_info = get_worker_info()
+        if worker_info:
+            new_seed = self._seed + worker_info.id
+            LOGGER.info(f'Spawning worker {worker_info}: Setting seed={new_seed}')
+            self.reset_rng(new_seed)
+
+        #* data sampling loop
         while True:
             yield self.sample_tasks(num_tasks=1)[0]
 

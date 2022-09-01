@@ -6,7 +6,7 @@ import numpy as np
 from typing import Dict, List, Tuple
 
 from tqdm import tqdm
-from erank.data.basemetadataset import QUERY_X_KEY, QUERY_Y_KEY, SUPPORT_X_KEY, SUPPORT_Y_KEY, BaseMetaDataset, Task
+from erank.data.basemetadataset import  BaseMetaDataset, Task, QUERY_X_KEY, QUERY_Y_KEY, SUPPORT_X_KEY, SUPPORT_Y_KEY
 from ml_utilities.torch_utils import to_ndarray
 import matplotlib.pyplot as plt
 
