@@ -35,7 +35,7 @@ sweep:
     - parameter: trainer.regularizer.regularizer_kwargs.loss_coefficient
       vals: [0.0, 1.0]
 
-start_num: 0 # use this to count how often this config is run
+start_num: 1 # use this to count how often this config is run
 
 ###
 config:
