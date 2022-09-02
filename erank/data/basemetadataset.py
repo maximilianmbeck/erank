@@ -35,33 +35,53 @@ def support_query_as_minibatch(set: Tuple[torch.Tensor, torch.Tensor],
 class Task(ABC):
 
     def __init__(self,
+                 support_size: int,
+                 query_size: int,
                  support_set: Dict[str, Union[torch.Tensor, np.ndarray]] = {},
                  query_set: Dict[str, Union[torch.Tensor, np.ndarray]] = {},
+                 regenerate_support_set: bool = False,
+                 regenerate_query_set: bool = False,
                  rng: np.random.Generator = None):
         self._rng = rng
+        self._support_size = support_size
+        self._query_size = query_size
+        self.regenerate_support_set = regenerate_support_set
+        self.regenerate_query_set = regenerate_query_set
         # Tensors must have batch dimension
         self._support_data = support_set
         self._query_data = query_set
 
     @property
     def support_set(self) -> Tuple[torch.Tensor, torch.Tensor]:
+        if self.regenerate_support_set:
+            self._generate_support_set()
         return self._support_data[SUPPORT_X_KEY], self._support_data[SUPPORT_Y_KEY]
 
     @property
     def query_set(self) -> Tuple[torch.Tensor, torch.Tensor]:
+        if self.regenerate_query_set:
+            self._generate_query_set()
         return self._query_data[QUERY_X_KEY], self._query_data[QUERY_Y_KEY]
 
     @property
     def support_size(self) -> int:
-        return self._support_data[SUPPORT_X_KEY].shape[0]
+        return self._support_size
 
     @property
     def query_size(self) -> int:
-        return self._query_data[QUERY_X_KEY].shape[0]
+        return self._query_size
 
     @property
     @abstractmethod
     def name(self) -> str:
+        pass
+
+    def _generate_support_set(self) -> None:
+        """Generate and set the support_set."""
+        pass
+
+    def _generate_query_set(self) -> None:
+        """Generate and set the query_set."""
         pass
 
     def plot_query_predictions(self, epoch: int, preds: Dict[int, torch.Tensor]) -> Tuple[Figure, str]:

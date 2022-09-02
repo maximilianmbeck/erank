@@ -6,7 +6,7 @@ import numpy as np
 
 from tqdm import tqdm
 from matplotlib.figure import Figure
-from erank.data.basemetadataset import  BaseMetaDataset, Task, QUERY_X_KEY, QUERY_Y_KEY, SUPPORT_X_KEY, SUPPORT_Y_KEY
+from erank.data.basemetadataset import BaseMetaDataset, Task, QUERY_X_KEY, QUERY_Y_KEY, SUPPORT_X_KEY, SUPPORT_Y_KEY
 from ml_utilities.torch_utils import to_ndarray
 import matplotlib.pyplot as plt
 
@@ -20,13 +20,15 @@ class SinusTask(Task):
                  phase: float,
                  x_range: List[float],
                  rng: np.random.Generator = None,
-                 regenerate_support_set: bool = False):
-        super().__init__(rng=rng)
-        self._support_size = support_size
-        self._query_size = query_size
+                 regenerate_support_set: bool = False,
+                 regenerate_query_set: bool = False):
+        super().__init__(support_size=support_size,
+                         query_size=query_size,
+                         regenerate_support_set=regenerate_support_set,
+                         regenerate_query_set=regenerate_query_set,
+                         rng=rng)
         self.amplitude = amplitude
         self.phase = phase
-        self.regenerate_support_set = regenerate_support_set
         self.x_range = x_range
 
         self._generate_support_set()
@@ -69,12 +71,6 @@ class SinusTask(Task):
         ax.set_ylabel('y')
         fname = f'epoch-{epoch:05d}-querypred-task-{self.name}.png'
         return fig, fname
-
-    @property
-    def support_set(self) -> Tuple[torch.Tensor, torch.Tensor]:
-        if self.regenerate_support_set:
-            self._generate_support_set()
-        return self._support_data[SUPPORT_X_KEY], self._support_data[SUPPORT_Y_KEY]
 
 
 class SinusDataset(BaseMetaDataset):
