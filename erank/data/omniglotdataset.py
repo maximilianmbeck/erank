@@ -1,14 +1,33 @@
+import sys
 import numpy as np
+from tqdm import tqdm
 from pathlib import Path
 from typing import Dict, List, Tuple, Union
+from erank.data.basemetaclassificationdataset import BaseMetaClassificationDataset, ClassificationTask
 from erank.data.basemetadataset import BaseMetaDataset, Task, QUERY_X_KEY, QUERY_Y_KEY, SUPPORT_X_KEY, SUPPORT_Y_KEY
-from numpy.random.bit_generator import BitGenerator
+from PIL import Image
 
-class OmniglotTask(Task):
-    pass
+CLASS_NAME_TEMPLATE = '{alphabet}--{character}'
 
 
-class OmniglotDataset(BaseMetaDataset):
+class OmniglotTask(ClassificationTask):
+
+    def __init__(self,
+                 support_size: int,
+                 query_size: int,
+                 task_data: Dict[str, np.ndarray],
+                 regenerate_support_set: bool = True,
+                 regenerate_query_set: bool = False,
+                 rng: np.random.Generator = None):
+        super().__init__(support_size=support_size,
+                         query_size=query_size,
+                         task_data=task_data,
+                         regenerate_support_set=regenerate_support_set,
+                         regenerate_query_set=regenerate_query_set,
+                         rng=rng)
+
+
+class OmniglotDataset(BaseMetaClassificationDataset):
     """Omniglot dataset
 
     The description as well as train/val/test splits are borrowed from Meta-Dataset:
@@ -84,6 +103,7 @@ class OmniglotDataset(BaseMetaDataset):
         'Blackfoot_(Canadian_Aboriginal_Syllabics)', 'Ojibwe_(Canadian_Aboriginal_Syllabics)',
         'Inuktitut_(Canadian_Aboriginal_Syllabics)', 'Tagalog', 'Alphabet_of_the_Magi'
     ]
+    output_img_size = (28, 28)
     # precomputed normalizer using all data in 'images_background'
     normalizer = None  # TODO precompute normalizer
 
@@ -97,25 +117,21 @@ class OmniglotDataset(BaseMetaDataset):
                  dataset_layout: str = 'metadataset',
                  seed: int = 0,
                  normalizer: Dict[str, List[float]] = None):
-        super().__init__(support_size=support_size,
+        super().__init__(data_root_path=data_root_path,
+                         n_way_classification=n_way_classification,
+                         support_size=support_size,
                          query_size=query_size,
+                         split=split,
                          num_tasks=num_tasks,
                          seed=seed,
                          normalizer=normalizer)
-        self.n_way_classification = n_way_classification
-        assert self.n_way_classification > 1, f'Need at least two classes for classification.'
         # check dataset configuration
         self.dataset_layout = dataset_layout
-        self.split = split
         assert self.split in OmniglotDataset.dataset_layout_split_options[
             self.
             dataset_layout], f'Split `{self.split}` not available for dataset_layout `{OmniglotDataset.dataset_layout_split_options[self.dataset_layout]}`'
-        # check data path
-        if isinstance(data_root_path, str):
-            data_root_path = Path(data_root_path)
-        assert data_root_path.is_absolute(), f'Data root path `{data_root_path}` is not an absolute path!'
-        self._data_root_path = data_root_path
-        self.dataset_path = data_root_path / OmniglotDataset.dataset_folder_name
+
+        self.dataset_path = self._data_root_path / OmniglotDataset.dataset_folder_name
         assert self.dataset_path.exists(), f'No omniglot dataset/directory found at `{self._data_root_path}`!'
         # check dataset toplevel folders
         toplevel_dirs = [d.stem for d in self.dataset_path.iterdir() if d.is_dir()]
@@ -123,10 +139,41 @@ class OmniglotDataset(BaseMetaDataset):
             toplevel_dirs), f'One or both toplevel folders of Omniglot are missing!'
 
         # load data into memory
-        self._alphabets : Dict[str, List[str]] = None
-        self._data, self._load_data(self.dataset_layout, self.split)
+        self._alphabets: Dict[str, List[str]] = None
+        self._data = self._load_data(self.dataset_layout, self.split)
+        # pre-generate some tasks which are accessed via get task to ensure deterministic behavior
+        # TODO pregenerate tasks
 
-    def _load_data(self, dataset_layout: str, split: str) -> Dict[str, np.ndarray]:
+    def _load_data(self, split: str) -> Dict[str, np.ndarray]:
+        self.__check_dataset()
+        # load relevant alphabets
+        data_folder = OmniglotDataset.dataset_split_toplevel_folders[split]
+        alphabets = [a.stem for a in (self.dataset_path / data_folder).iterdir()]
+
+        if self.dataset_layout == 'metadataset':
+            if split == 'train':
+                alphabets = list(set(alphabets) - set(OmniglotDataset.metadataset_validation_alphabets))
+            elif split == 'val':
+                alphabets = OmniglotDataset.metadataset_validation_alphabets
+
+        # load classes and data from the alphabets
+        data_dict, alphabets_dict = {}, {}
+        for alphabet in tqdm(alphabets, file=sys.stdout, desc='Loading Omniglot Alphabets'):
+            for character in (self.dataset_path / data_folder / alphabet).iterdir():
+                # add character to alphabets_dict
+                if not alphabet in alphabets_dict:
+                    alphabets_dict[alphabet] = [character.stem]
+                else:
+                    alphabets_dict[alphabet].append(character.stem)
+
+                class_name = CLASS_NAME_TEMPLATE.format(alphabet=alphabet, character=character.stem)
+                # load characters into data dict
+                data_dict[class_name] = self.__load_characters_from_alphabet(character_folder=character)
+
+        self._alphabets = alphabets_dict
+        return data_dict
+
+    def __check_dataset(self) -> None:
         # load all available alphabets
         alphabets_in_folder = {
             tlf: [a.stem for a in (self.dataset_path / tlf).iterdir()
@@ -138,34 +185,24 @@ class OmniglotDataset(BaseMetaDataset):
                 alphabets_in_folder[folder]
             ) == n_alphabets, f'Folder `{folder}` contains {len(alphabets_in_folder[folder])}, but expected {n_alphabets}.'
 
-        # load relevant alphabets
-        data_folder = OmniglotDataset.dataset_split_toplevel_folders[split]
-        alphabets = [a.stem for a in (self.dataset_path / data_folder).iterdir()]
+    def __load_characters_from_alphabet(self, character_folder: Path) -> np.ndarray:
+        images_for_character = []
+        for character_image_file in character_folder.iterdir():
+            img = Image.open(character_image_file).resize(OmniglotDataset.output_img_size)
+            img = np.asarray(img, dtype=np.int8)
+            # add channel dimension
+            img = np.expand_dims(img, axis=0)
+            images_for_character.append(img)
 
-        if dataset_layout == 'metadataset':
-            if split == 'train':
-                alphabets = list(set(alphabets) - set(OmniglotDataset.metadataset_validation_alphabets))
-            elif split == 'val':
-                alphabets = OmniglotDataset.metadataset_validation_alphabets
-        
-        # load classes and data from the alphabets
-        data_dict, alphabets_dict = {}, {}
-        for alphabet in alphabets:
-            for character in (self.dataset_path / data_folder / alphabet).iterdir():
-                # add character to alphabets_dict
+        assert len(
+            images_for_character
+        ) == OmniglotDataset.images_per_character, f'Number of images ({len(images_for_character)}) for character `{character_folder}` does not match {OmniglotDataset.images_per_character}.'
 
-                # load characters into data dict
-                data_dict[character.stem] = None # TODO from here
-        
+        return np.array(images_for_character)
 
-        self._alphabets = alphabets_dict
-        return None
-
-    def __load_characters_from_alphabet(self, folder: str, character: str) -> np.ndarray:
-        
-        pass
-
-    def _get_n_way_combinations(self) -> None:
+    def sample_task(self) -> Task:
+        # sample classes without replacement
+        # create task from this
         pass
 
     def sample_tasks(self, num_tasks: int = -1) -> List[Task]:
@@ -173,6 +210,3 @@ class OmniglotDataset(BaseMetaDataset):
 
     def get_tasks(self, num_tasks: int = -1) -> List[Task]:
         return super().get_tasks(num_tasks)
-
-    def get_task(self, task_name: str) -> Task:
-        return super().get_task(task_name)

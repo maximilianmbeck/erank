@@ -121,6 +121,10 @@ class BaseMetaDataset(ABC, IterableDataset):
         self._rng: np.random.Generator = None
         self.reset_rng(seed=seed)
 
+        # store pre-generated tasks, to be accessed via `get_tasks()`
+        self.pregen_tasks: np.ndarray = None
+        self.pregen_task_name_to_index: Dict[str, int] = None
+
     @abstractmethod
     def sample_tasks(self, num_tasks: int = -1) -> List[Task]:
         """Sample `num_tasks` tasks randomly. The tasks (and hence also the order) may be different on each call.
@@ -134,30 +138,21 @@ class BaseMetaDataset(ABC, IterableDataset):
         pass
 
     @abstractmethod
-    def get_tasks(self, num_tasks: int = -1) -> List[Task]:
+    def get_tasks(self, start_index: int = 0, num_tasks: int = -1) -> List[Task]:
         """Get `num_tasks` tasks in a deterministic way. The order and the tasks will always remain the same.
         If `num_tasks` is 5, it returns always the first five tasks. If `num_tasks` is 7, it returns the first 5 plus the next
         2 tasks.
 
         Args:
+            start_index (int, optional): (Start) Index of task(s) to return. Defaults to 0.
             num_tasks (int, optional): Number of tasks to return. If -1, all available tasks are returned. Defaults to -1.
-
+        
         Returns:
             List[Task]: The selected tasks.
         """
         pass
-
-    @abstractmethod
-    def get_task(self, task_name: str) -> Task:
-        """Get a task by name. `name` is defined by the property `name` of the `Task` class.
-
-        Args:
-            task_name (str): The task name.
-
-        Returns:
-            Task: The task.
-        """
-        pass
+        # TODO from here copy from sinus dataset
+        
 
     def reset_rng(self, seed: int) -> None:
         self._rng = np.random.default_rng(seed=seed)

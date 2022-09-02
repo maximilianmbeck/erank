@@ -92,9 +92,7 @@ class SinusDataset(BaseMetaDataset):
         self.x_range = x_range
         self.regenerate_task_support_set = regenerate_task_support_set
         # generate all tasks an hold them in memory
-        self.tasks: np.ndarray = None
-        self.task_name_to_index: Dict[str, int] = None
-        self.tasks, self.task_name_to_index = self._generate_tasks()
+        self.pregen_tasks, self.pregen_task_name_to_index = self._generate_tasks()
 
     def _generate_tasks(self) -> Tuple[np.ndarray, Dict[str, int]]:
         tasks = []
@@ -115,13 +113,10 @@ class SinusDataset(BaseMetaDataset):
 
     def sample_tasks(self, num_tasks: int) -> List[SinusTask]:
         if num_tasks == -1:
-            num_tasks = len(self.tasks)
-        return self._rng.choice(self.tasks, size=num_tasks, replace=False).tolist()
+            num_tasks = len(self.pregen_tasks)
+        return self._rng.choice(self.pregen_tasks, size=num_tasks, replace=False).tolist()
 
-    def get_tasks(self, num_tasks: int = -1) -> List[Task]:
+    def get_tasks(self, start_index: int = 0, num_tasks: int = -1) -> List[Task]:
         if num_tasks == -1:
-            num_tasks = len(self.tasks)
-        return self.tasks[:num_tasks].tolist()
-
-    def get_task(self, task_name: str) -> Task:
-        return self.tasks[self.task_name_to_index[task_name]]
+            num_tasks = len(self.pregen_tasks)
+        return self.pregen_tasks[start_index:num_tasks].tolist()
