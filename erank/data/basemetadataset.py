@@ -26,7 +26,7 @@ def support_query_as_minibatch(set: Tuple[torch.Tensor, torch.Tensor],
     """
 
     def fun(x):
-        assert len(x.shape) > 1, 'Tensor as too less dimensions. Maybe batch dimension missing?'
+        assert len(x.shape) > 1, 'Tensor has too less dimensions. Maybe batch dimension is missing?'
         return x.to(device)
 
     return tuple(map(fun, set))
@@ -110,16 +110,23 @@ class BaseMetaDataset(ABC, IterableDataset):
                  support_size: int,
                  query_size: int,
                  num_tasks: int = -1,
+                 regenerate_task_support_set: bool = True,
+                 regenerate_task_query_set: bool = True,
                  seed: int = None,
                  normalizer: Dict[str, List[float]] = None):
-        # num_tasks -1 means infinite / specified by dataset
-        self.num_tasks = num_tasks
-        self.support_size = support_size
-        self.query_size = query_size
-        self.normalizer = normalizer
         self._seed = seed
         self._rng: np.random.Generator = None
         self.reset_rng(seed=seed)
+
+        # num_tasks -1 means infinite / specified by dataset
+        self.num_tasks = num_tasks  # number of pregenerated tasks
+        self.support_size = support_size
+        self.query_size = query_size
+        self.normalizer = normalizer
+        self.regenerate_task_support_set = regenerate_task_support_set
+        self.regenerate_task_query_set = regenerate_task_query_set
+        assert not (not regenerate_task_support_set and regenerate_task_query_set
+                   ), f'Regenerating query set, but not the support set is not possible! Check your selected options!'
 
         # store pre-generated tasks, to be accessed via `get_tasks()`
         self.pregen_tasks: np.ndarray = None
@@ -139,7 +146,7 @@ class BaseMetaDataset(ABC, IterableDataset):
 
     @abstractmethod
     def get_tasks(self, start_index: int = 0, num_tasks: int = -1) -> List[Task]:
-        """Get `num_tasks` tasks in a deterministic way. The order and the tasks will always remain the same.
+        """Access to pregenerated tasks. Get `num_tasks` tasks in a deterministic way. The order and the tasks will always remain the same.
         If `num_tasks` is 5, it returns always the first five tasks. If `num_tasks` is 7, it returns the first 5 plus the next
         2 tasks.
 
@@ -150,9 +157,9 @@ class BaseMetaDataset(ABC, IterableDataset):
         Returns:
             List[Task]: The selected tasks.
         """
-        pass
-        # TODO from here copy from sinus dataset
-        
+        if num_tasks == -1:
+            num_tasks = len(self.pregen_tasks)
+        return self.pregen_tasks[start_index:num_tasks].tolist()
 
     def reset_rng(self, seed: int) -> None:
         self._rng = np.random.default_rng(seed=seed)

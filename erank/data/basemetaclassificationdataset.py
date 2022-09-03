@@ -8,6 +8,9 @@ from ml_utilities.utils import convert_to_simple_str
 
 TASK_NAME_SEPARATOR = '#'
 
+SUPPORT_X_IDXS_KEY = QUERY_X_IDXS_KEY = 'x_idxs'
+
+
 class ClassificationTask(Task):
 
     def __init__(self,
@@ -23,7 +26,25 @@ class ClassificationTask(Task):
                          regenerate_query_set=regenerate_query_set,
                          rng=rng)
 
-        self._task_data = task_data
+        self._task_data = task_data  # {class_name: data_samples}
+        self._task_labels = self._generate_labels()  # {class_name: label_idx}
+
+        self._generate_query_set()
+        self._generate_support_set()
+
+    def _generate_labels(self) -> Dict[str, int]:
+        return {class_name: label for label, class_name in enumerate(self._task_data)}
+
+    def _generate_support_set(self) -> None:
+        # for every class in task_data, sample support_size data samples
+        for class_name, data_samples in self._task_data.items():
+            # TODO from here
+
+    def _generate_query_set(self) -> None:
+        return super()._generate_query_set()
+
+    def _get_available_sample_indices(self) -> List[int]:
+        pass
 
     @property
     def task_classes(self) -> List[str]:
@@ -38,7 +59,6 @@ class ClassificationTask(Task):
         return convert_to_simple_str(self.task_classes, separator=TASK_NAME_SEPARATOR)
 
 
-
 class BaseMetaClassificationDataset(BaseMetaDataset):
 
     def __init__(self,
@@ -48,11 +68,15 @@ class BaseMetaClassificationDataset(BaseMetaDataset):
                  query_size: int,
                  split: str,
                  num_tasks: int = -1,
+                 regenerate_task_support_set: bool = True,
+                 regenerate_task_query_set: bool = True,
                  seed: int = None,
                  normalizer: Dict[str, List[float]] = None):
         super().__init__(support_size=support_size,
                          query_size=query_size,
                          num_tasks=num_tasks,
+                         regenerate_task_support_set=regenerate_task_support_set,
+                         regenerate_task_query_set=regenerate_task_query_set,
                          seed=seed,
                          normalizer=normalizer)
         #* public attributes
@@ -68,7 +92,8 @@ class BaseMetaClassificationDataset(BaseMetaDataset):
         assert data_root_path.is_absolute(), f'Data root path `{data_root_path}` is not an absolute path!'
         self._data_root_path = data_root_path
 
-        self._data: Dict[str, np.ndarray] = None
+        # make sure dict is sorted, to ensure deterministic behavior (dict(sorted(unsorted_dict.items())))
+        self._data: Dict[str, np.ndarray] = None  # {class_name: class samples}
 
     @property
     def dataset_classes(self) -> List[str]:
@@ -80,8 +105,9 @@ class BaseMetaClassificationDataset(BaseMetaDataset):
 
     @property
     def n_way_combinations(self) -> int:
-        return math.factorial(len(self.dataset_classes)) / (math.factorial(self.n_way) *
-                                                            math.factorial(len(self.dataset_classes) - self.n_way))
+        return int(
+            math.factorial(len(self.dataset_classes)) /
+            (math.factorial(self.n_way) * math.factorial(len(self.dataset_classes) - self.n_way)))
 
     @abstractmethod
     def _load_data(self, split: str) -> Dict[str, np.ndarray]:

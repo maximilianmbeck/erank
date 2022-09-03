@@ -76,21 +76,26 @@ class SinusTask(Task):
 class SinusDataset(BaseMetaDataset):
 
     def __init__(
-        self,
-        support_size: int = 10,
-        query_size: int = 10,
-        num_tasks: int = 10000,
-        amplitude_range: List[float] = [0.1, 5.0],
-        phase_range: List[float] = [0, 2 * 3.14159265359],
-        x_range: List[float] = [-5, 5],
-        regenerate_task_support_set: bool = False,  # regenerate support set on each call
-        seed: int = 0):  # seed used for task generation, support and query samples
-        super().__init__(support_size=support_size, query_size=query_size, num_tasks=num_tasks, seed=seed)
+            self,
+            support_size: int = 10,
+            query_size: int = 10,
+            num_tasks: int = 10000,
+            amplitude_range: List[float] = [0.1, 5.0],
+            phase_range: List[float] = [0, 2 * 3.14159265359],
+            x_range: List[float] = [-5, 5],
+            regenerate_task_support_set: bool = False,  # regenerate support set on each call
+            regenerate_task_query_set: bool = False,
+            seed: int = 0):  # seed used for task generation, support and query samples
+        super().__init__(support_size=support_size,
+                         query_size=query_size,
+                         num_tasks=num_tasks,
+                         regenerate_task_support_set=regenerate_task_support_set,
+                         regenerate_task_query_set=regenerate_task_query_set,
+                         seed=seed)
         assert len(amplitude_range) == 2 and len(phase_range) == 2 and len(x_range) == 2
         self.amplitudes = self._rng.uniform(amplitude_range[0], amplitude_range[1], size=num_tasks)
         self.phases = self._rng.uniform(phase_range[0], phase_range[1], size=num_tasks)
         self.x_range = x_range
-        self.regenerate_task_support_set = regenerate_task_support_set
         # generate all tasks an hold them in memory
         self.pregen_tasks, self.pregen_task_name_to_index = self._generate_tasks()
 
@@ -115,8 +120,3 @@ class SinusDataset(BaseMetaDataset):
         if num_tasks == -1:
             num_tasks = len(self.pregen_tasks)
         return self._rng.choice(self.pregen_tasks, size=num_tasks, replace=False).tolist()
-
-    def get_tasks(self, start_index: int = 0, num_tasks: int = -1) -> List[Task]:
-        if num_tasks == -1:
-            num_tasks = len(self.pregen_tasks)
-        return self.pregen_tasks[start_index:num_tasks].tolist()

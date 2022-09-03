@@ -27,6 +27,13 @@ class OmniglotTask(ClassificationTask):
                          rng=rng)
 
 
+    def _generate_support_set(self) -> None:
+        """When generating a new support set, sample new samples from all samples - query set.
+        """
+        pass
+
+    def _generate_query_set(self) -> None:
+        return super()._generate_query_set()
 class OmniglotDataset(BaseMetaClassificationDataset):
     """Omniglot dataset
 
@@ -140,7 +147,7 @@ class OmniglotDataset(BaseMetaClassificationDataset):
 
         # load data into memory
         self._alphabets: Dict[str, List[str]] = None
-        self._data = self._load_data(self.dataset_layout, self.split)
+        self._data = self._load_data(self.split)
         # pre-generate some tasks which are accessed via get task to ensure deterministic behavior
         # TODO pregenerate tasks
 
@@ -159,7 +166,7 @@ class OmniglotDataset(BaseMetaClassificationDataset):
         # load classes and data from the alphabets
         data_dict, alphabets_dict = {}, {}
         for alphabet in tqdm(alphabets, file=sys.stdout, desc='Loading Omniglot Alphabets'):
-            for character in (self.dataset_path / data_folder / alphabet).iterdir():
+            for character in sorted((self.dataset_path / data_folder / alphabet).iterdir()):
                 # add character to alphabets_dict
                 if not alphabet in alphabets_dict:
                     alphabets_dict[alphabet] = [character.stem]
@@ -171,6 +178,7 @@ class OmniglotDataset(BaseMetaClassificationDataset):
                 data_dict[class_name] = self.__load_characters_from_alphabet(character_folder=character)
 
         self._alphabets = alphabets_dict
+        data_dict = dict(sorted(data_dict.items()))
         return data_dict
 
     def __check_dataset(self) -> None:
