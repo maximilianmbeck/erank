@@ -12,6 +12,8 @@ from ml_utilities.utils import convert_to_simple_str
 
 LOGGER = logging.getLogger(__name__)
 TASK_NAME_SEPARATOR = '#'
+CHANNEL_DIM = 1
+BATCH_DIM = 0
 
 
 class ClassificationTask(Task):
@@ -46,7 +48,6 @@ class ClassificationTask(Task):
         support_x, support_y, self._support_idxes = self._sample_set(set_specifier='support',
                                                                      set_size=self.support_size,
                                                                      exclude_idxes=self._query_idxes)
-
         self._support_data[SUPPORT_X_KEY] = support_x
         self._support_data[SUPPORT_Y_KEY] = support_y
 
@@ -156,7 +157,8 @@ class BaseMetaClassificationDataset(BaseMetaDataset):
         self._data_root_path = data_root_path
 
         # make sure dict is sorted, to ensure deterministic behavior (dict(sorted(unsorted_dict.items())))
-        self._data: Dict[str, np.ndarray] = None  # {class_name: class samples}
+        # {class_name: class samples}, class_samples.shape = (n_samples, data_dim), data_dim = Channelx???
+        self._data: Dict[str, np.ndarray] = None
 
     @property
     def dataset_classes(self) -> List[str]:
@@ -226,3 +228,22 @@ class BaseMetaClassificationDataset(BaseMetaDataset):
                                   regenerate_support_set=self.regenerate_task_support_set,
                                   regenerate_query_set=self.regenerate_task_query_set)
         return task
+
+    def compute_normalizer(self) -> Dict[str, List[float]]:
+        mean = 0.
+        std = 0.
+        num_dataset_samples = 0
+        for class_name, class_data in self._data.items():
+            num_class_samples = class_data.shape[BATCH_DIM]
+            data_ = class_data.reshape(num_class_samples, class_data.shape[CHANNEL_DIM], -1)
+            mean += data_.mean(axis=2).sum(axis=0)
+            std += data_.std(axis=2).sum(axis=0)
+            mean /= num_class_samples
+            std /= num_class_samples
+            num_dataset_samples += num_class_samples
+
+        # mean /= num_dataset_samples
+        # std /= num_dataset_samples
+
+        normalizer_values = {'mean': mean.tolist(), 'std': std.tolist(), 'num_dataset_samples': num_dataset_samples}
+        return normalizer_values
