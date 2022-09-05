@@ -84,6 +84,11 @@ class Task(ABC):
         """Generate and set the query_set."""
         pass
 
+    def _generate_sets(self) -> None:
+        """Convenience function to ensure that support and query set are always generated in the correct order upon initialization."""
+        self._generate_support_set() # Mind the order!
+        self._generate_query_set()
+
     def plot_query_predictions(self, epoch: int, preds: Dict[int, torch.Tensor]) -> Tuple[Figure, str]:
         """Make a figure comparing the predictions on the query set before and after learning on the support set.
 
@@ -135,7 +140,7 @@ class BaseMetaDataset(ABC, IterableDataset):
         self.pregen_tasks: np.ndarray = None
         self.pregen_task_name_to_index: Dict[str, int] = None
 
-    def generate_pregen_tasks(self) -> None:
+    def create_pregen_tasks(self) -> None:
         """Generate `pregen_tasks`. Default behavior samples tasks randomly via `sample_tasks()`.
         Implement and call this method, when accessing tasks via `get_tasks()`."""
         tasks = self.sample_tasks(self.num_tasks)

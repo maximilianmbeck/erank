@@ -116,22 +116,27 @@ class OmniglotDataset(BaseMetaClassificationDataset):
     # precomputed normalizer using all data in 'images_background'
     normalizer = None  # TODO precompute normalizer
 
-    def __init__(self,
-                 data_root_path: Union[str, Path],
-                 n_way_classification: int,
-                 support_size: int,
-                 query_size: int,
-                 split: str,
-                 num_tasks: int = -1,
-                 dataset_layout: str = 'metadataset',
-                 seed: int = 0,
-                 normalizer: Dict[str, List[float]] = None):
+    def __init__(
+            self,
+            data_root_path: Union[str, Path],
+            n_way_classification: int,
+            support_size: int,
+            query_size: int,
+            split: str,
+            num_tasks: int = -1,  # TODO change to pregen tasks
+            regenerate_task_support_set: bool = True,
+            regenerate_task_query_set: bool = True,
+            dataset_layout: str = 'metadataset',
+            seed: int = 0,
+            normalizer: Dict[str, List[float]] = None):
         super().__init__(data_root_path=data_root_path,
                          n_way_classification=n_way_classification,
                          support_size=support_size,
                          query_size=query_size,
                          split=split,
                          num_tasks=num_tasks,
+                         regenerate_task_support_set=regenerate_task_support_set,
+                         regenerate_task_query_set=regenerate_task_query_set,
                          seed=seed,
                          normalizer=normalizer)
         # check dataset configuration
@@ -152,7 +157,7 @@ class OmniglotDataset(BaseMetaClassificationDataset):
         self._data = self._load_data(
             self.split)  # TODO: do this with https://stackoverflow.com/questions/100003/what-are-metaclasses-in-python
         # pre-generate some tasks which are accessed via get task to ensure deterministic behavior
-        # TODO pregenerate tasks
+        self.create_pregen_tasks()
 
     def _load_data(self, split: str) -> Dict[str, np.ndarray]:
         self.__check_dataset()

@@ -31,8 +31,7 @@ class SinusTask(Task):
         self.phase = phase
         self.x_range = x_range
 
-        self._generate_support_set()
-        self._generate_query_set()
+        self._generate_sets()
 
     @property
     def name(self) -> str:

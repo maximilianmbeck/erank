@@ -1,16 +1,17 @@
 from typing import Dict, List, Set, Tuple, Union
+import torch
 import math
+import copy
 import logging
 import itertools
 from abc import abstractmethod
 from pathlib import Path
 import numpy as np
-from erank.data.basemetadataset import BaseMetaDataset, Task
+from erank.data.basemetadataset import QUERY_X_KEY, QUERY_Y_KEY, SUPPORT_X_KEY, SUPPORT_Y_KEY, BaseMetaDataset, Task
 from ml_utilities.utils import convert_to_simple_str
 
 LOGGER = logging.getLogger(__name__)
 TASK_NAME_SEPARATOR = '#'
-SUPPORT_X_IDXS_KEY = QUERY_X_IDXS_KEY = 'x_idxs'
 
 
 class ClassificationTask(Task):
@@ -32,23 +33,70 @@ class ClassificationTask(Task):
         self._task_data = task_data  # {class_name: data_samples}
         self._task_labels = self._generate_labels()  # {class_name: label_idx}
 
-        self._generate_query_set()
-        self._generate_support_set()
+        init_idxs = {class_name: None for class_name in self._task_data}
+        self._support_idxes: Dict[str, np.ndarray] = copy.deepcopy(init_idxs)
+        self._query_idxes: Dict[str, np.ndarray] = copy.deepcopy(init_idxs)
+
+        self._generate_sets()
 
     def _generate_labels(self) -> Dict[str, int]:
         return {class_name: label for label, class_name in enumerate(self._task_data)}
 
     def _generate_support_set(self) -> None:
-        # for every class in task_data, sample support_size data samples
-        for class_name, data_samples in self._task_data.items():
-            # TODO from here
-            pass
+        support_x, support_y, self._support_idxes = self._sample_set(set_specifier='support',
+                                                                     set_size=self.support_size,
+                                                                     exclude_idxes=self._query_idxes)
+
+        self._support_data[SUPPORT_X_KEY] = support_x
+        self._support_data[SUPPORT_Y_KEY] = support_y
 
     def _generate_query_set(self) -> None:
-        return super()._generate_query_set()
+        query_x, query_y, self._query_idxes = self._sample_set(set_specifier='query',
+                                                               set_size=self.query_size,
+                                                               exclude_idxes=self._support_idxes)
+        self._query_data[QUERY_X_KEY] = query_x
+        self._query_data[QUERY_Y_KEY] = query_y
 
-    def _get_available_sample_indices(self) -> List[int]:
-        pass
+    def _sample_set(self, set_specifier: str, set_size: int,
+                    exclude_idxes: Dict[str, np.ndarray]) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, np.ndarray]]:
+        """Sample support or query set. Make sure sampling is non-overlapping.
+
+        Args:
+            set_specifier (str): `support` or `query`
+            set_size (int): 
+            exclude_idxes (Dict[str, np.ndarray]): The indices of the data samples to exclude (as they are already in the other set).
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor, Dict[str, np.ndarray]]: Data and labels for the set; Set indices per class.
+        """
+        # for every class in task_data, sample set_size data samples
+        # generate two tensors: set_x (images), set_y (labels)
+        set_x = []
+        set_y = []
+        set_idxes = {}
+        for class_name, data_samples in self._task_data.items():
+            #* sample set idxes
+            idxes = np.arange(len(data_samples))
+
+            if not exclude_idxes[class_name] is None:
+                if (set_specifier == 'support') or (set_specifier == 'query'):
+                    # sample set only from samples excluding the other set's samples
+                    idxes = np.setdiff1d(idxes, exclude_idxes[class_name], assume_unique=True)
+
+            self._rng.shuffle(idxes)
+            set_class_idxes = idxes[:set_size]
+            set_idxes[class_name] = set_class_idxes
+
+            #* create data tensors
+            x_data = self._task_data[class_name][set_class_idxes]
+            y_data = np.repeat(self._task_labels[class_name], set_size)
+
+            set_x.append(torch.tensor(x_data, dtype=torch.float32))
+            set_y.append(torch.tensor(y_data, dtype=torch.float32))
+
+        set_x = torch.cat(set_x)  # shape: (batch, data_dims), for image data: data_dims=CxHxW
+        set_y = torch.cat(set_y).unsqueeze(dim=1)  # shape: (batch, 1)
+        return set_x, set_y, set_idxes
 
     @property
     def task_classes(self) -> List[str]:
@@ -65,6 +113,13 @@ class ClassificationTask(Task):
     @property
     def dataset_name(self) -> str:
         return self._dataset_name
+
+    def _generate_sets(self) -> None:
+        super()._generate_sets()
+        # check for non-overlapping data samples
+        for task_class in self.task_classes:
+            assert len(
+                np.intersect1d(self._support_idxes[task_class], self._query_idxes[task_class], assume_unique=True)) == 0
 
 
 class BaseMetaClassificationDataset(BaseMetaDataset):
