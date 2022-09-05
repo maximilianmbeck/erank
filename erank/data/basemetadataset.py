@@ -100,6 +100,9 @@ class Task(ABC):
     def __str__(self) -> str:
         return self.name
 
+    def __lt__(self, other) -> bool:
+        return self.name < other.name
+
 
 class BaseMetaDataset(ABC, IterableDataset):
     """
@@ -132,6 +135,15 @@ class BaseMetaDataset(ABC, IterableDataset):
         self.pregen_tasks: np.ndarray = None
         self.pregen_task_name_to_index: Dict[str, int] = None
 
+    def generate_pregen_tasks(self) -> None:
+        """Generate `pregen_tasks`. Default behavior samples tasks randomly via `sample_tasks()`.
+        Implement and call this method, when accessing tasks via `get_tasks()`."""
+        tasks = self.sample_tasks(self.num_tasks)
+        task_name_to_index = {task.name: i for i, task in enumerate(tasks)}
+        self.pregen_tasks = np.array(tasks)
+        self.pregen_tasks.sort()
+        self.pregen_task_name_to_index = task_name_to_index
+
     @abstractmethod
     def sample_tasks(self, num_tasks: int = -1) -> List[Task]:
         """Sample `num_tasks` tasks randomly. The tasks (and hence also the order) may be different on each call.
@@ -144,7 +156,6 @@ class BaseMetaDataset(ABC, IterableDataset):
         """
         pass
 
-    @abstractmethod
     def get_tasks(self, start_index: int = 0, num_tasks: int = -1) -> List[Task]:
         """Access to pregenerated tasks. Get `num_tasks` tasks in a deterministic way. The order and the tasks will always remain the same.
         If `num_tasks` is 5, it returns always the first five tasks. If `num_tasks` is 7, it returns the first 5 plus the next

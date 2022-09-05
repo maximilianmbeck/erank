@@ -26,7 +26,6 @@ class OmniglotTask(ClassificationTask):
                          regenerate_query_set=regenerate_query_set,
                          rng=rng)
 
-
     def _generate_support_set(self) -> None:
         """When generating a new support set, sample new samples from all samples - query set.
         """
@@ -34,6 +33,8 @@ class OmniglotTask(ClassificationTask):
 
     def _generate_query_set(self) -> None:
         return super()._generate_query_set()
+
+
 class OmniglotDataset(BaseMetaClassificationDataset):
     """Omniglot dataset
 
@@ -89,6 +90,7 @@ class OmniglotDataset(BaseMetaClassificationDataset):
         .. [#] Lake, Brenden M., Ruslan Salakhutdinov, and Joshua B. Tenenbaum. "The Omniglot challenge: a 3-year progress report." 
                Current Opinion in Behavioral Sciences 29 (2019): 97-104.
     """
+    name = 'omniglot'
 
     dataset_folder_name = 'omniglot'
     toplevel_folders_n_alphabets = {
@@ -147,7 +149,8 @@ class OmniglotDataset(BaseMetaClassificationDataset):
 
         # load data into memory
         self._alphabets: Dict[str, List[str]] = None
-        self._data = self._load_data(self.split)
+        self._data = self._load_data(
+            self.split)  # TODO: do this with https://stackoverflow.com/questions/100003/what-are-metaclasses-in-python
         # pre-generate some tasks which are accessed via get task to ensure deterministic behavior
         # TODO pregenerate tasks
 
@@ -207,14 +210,3 @@ class OmniglotDataset(BaseMetaClassificationDataset):
         ) == OmniglotDataset.images_per_character, f'Number of images ({len(images_for_character)}) for character `{character_folder}` does not match {OmniglotDataset.images_per_character}.'
 
         return np.array(images_for_character)
-
-    def sample_task(self) -> Task:
-        # sample classes without replacement
-        # create task from this
-        pass
-
-    def sample_tasks(self, num_tasks: int = -1) -> List[Task]:
-        return super().sample_tasks(num_tasks)
-
-    def get_tasks(self, num_tasks: int = -1) -> List[Task]:
-        return super().get_tasks(num_tasks)
