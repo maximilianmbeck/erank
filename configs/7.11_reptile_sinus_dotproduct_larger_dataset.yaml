@@ -21,7 +21,7 @@ run_config:
       job_type: run_handler
 
 seeds:
-  - 0
+  - 1
 
 sweep:
   type: grid
@@ -37,7 +37,7 @@ sweep:
     - parameter: data.train_metadataset_kwargs.num_tasks
       vals: [10000, 100000]
 
-start_num: 0 # use this to count how often this config is run
+start_num: 2 # use this to count how often this config is run
 
 ###
 config:
@@ -96,7 +96,7 @@ config:
       optimizer_kwargs:
         lr: 0.001 # default sine: 0.01
     n_inner_iter: XXX #100 #3
-    val_pred_plots_for_tasks: 2 #1 # Prediction plots for `val_plots` tasks. If int: Uses the first `val_plots` tasks to generate plots
+    val_pred_plots_for_tasks: 0 #2 #1 # Prediction plots for `val_plots` tasks. If int: Uses the first `val_plots` tasks to generate plots
     inner_eval_after_steps: [0, 1, 2, 3, 5, 10, 20, 30, 50] # null: use default, List[int]: list of steps after, which eval is done
     log_plot_inner_learning_curves:
       - loss_key: loss_total
@@ -132,7 +132,7 @@ config:
       phase_range: [0, 6.283185307]
       x_range: [-5, 5]
       regenerate_task_support_set: XXX #False
-      seed: ${config.experiment_data.seed}
+      seed: ${config.experiment_data.seed} # TODO rerun with new seeds
     val_metadataset_kwargs:
       support_size: 10
       query_size: 50
@@ -140,5 +140,5 @@ config:
       amplitude_range: [0.1, 5.0]
       phase_range: [0, 6.283185307]
       x_range: [-5, 5]
-      regenerate_task_support_set: False
-      seed: 1 # different from train dataset
+      regenerate_task_support_set: True #False
+      seed: 2 # different from train dataset
