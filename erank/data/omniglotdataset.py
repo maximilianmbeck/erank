@@ -14,31 +14,6 @@ OMNIGLOT_METADATASET_TRAIN_NORMALIZER = {
     'num_dataset_samples': 17660
 }
 
-# class OmniglotTask(ClassificationTask):
-
-#     def __init__(self,
-#                  support_size: int,
-#                  query_size: int,
-#                  task_data: Dict[str, np.ndarray],
-#                  regenerate_support_set: bool = True,
-#                  regenerate_query_set: bool = False,
-#                  rng: np.random.Generator = None):
-#         super().__init__(support_size=support_size,
-#                          query_size=query_size,
-#                          task_data=task_data,
-#                          regenerate_support_set=regenerate_support_set,
-#                          regenerate_query_set=regenerate_query_set,
-#                          rng=rng)
-
-#     def _generate_support_set(self) -> None:
-#         """When generating a new support set, sample new samples from all samples - query set.
-#         """
-#         pass
-
-#     def _generate_query_set(self) -> None:
-#         return super()._generate_query_set()
-
-
 class OmniglotDataset(BaseMetaClassificationDataset):
     """Omniglot dataset
 
