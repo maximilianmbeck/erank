@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 from erank.data.basemetadataset import QUERY_X_KEY, QUERY_Y_KEY, SUPPORT_X_KEY, SUPPORT_Y_KEY, BaseMetaDataset, Task
 from ml_utilities.utils import convert_to_simple_str
+from ml_utilities.data_utils import Scaler
 
 LOGGER = logging.getLogger(__name__)
 TASK_NAME_SEPARATOR = '#'
@@ -24,13 +25,15 @@ class ClassificationTask(Task):
                  dataset_name: str,
                  task_data: Dict[str, np.ndarray],
                  rng: np.random.Generator,
+                 normalizer: Scaler,
                  regenerate_support_set: bool = True,
                  regenerate_query_set: bool = False):
         super().__init__(support_size=support_size,
                          query_size=query_size,
                          regenerate_support_set=regenerate_support_set,
                          regenerate_query_set=regenerate_query_set,
-                         rng=rng)
+                         rng=rng, 
+                         normalizer=normalizer)
         self._dataset_name = dataset_name
         self._task_data = task_data  # {class_name: data_samples}
         self._task_labels = self._generate_labels()  # {class_name: label_idx}
@@ -225,6 +228,7 @@ class BaseMetaClassificationDataset(BaseMetaDataset):
                                   dataset_name=ds_name,
                                   task_data=task_data,
                                   rng=self._rng,
+                                  normalizer=self.normalizer,
                                   regenerate_support_set=self.regenerate_task_support_set,
                                   regenerate_query_set=self.regenerate_task_query_set)
         return task
@@ -238,12 +242,10 @@ class BaseMetaClassificationDataset(BaseMetaDataset):
             data_ = class_data.reshape(num_class_samples, class_data.shape[CHANNEL_DIM], -1)
             mean += data_.mean(axis=2).sum(axis=0)
             std += data_.std(axis=2).sum(axis=0)
-            mean /= num_class_samples
-            std /= num_class_samples
             num_dataset_samples += num_class_samples
 
-        # mean /= num_dataset_samples
-        # std /= num_dataset_samples
+        mean /= num_dataset_samples
+        std /= num_dataset_samples
 
         normalizer_values = {'mean': mean.tolist(), 'std': std.tolist(), 'num_dataset_samples': num_dataset_samples}
         return normalizer_values
