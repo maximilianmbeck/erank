@@ -8,31 +8,35 @@ from erank.data.basemetadataset import BaseMetaDataset, Task, QUERY_X_KEY, QUERY
 from PIL import Image
 
 CLASS_NAME_TEMPLATE = '{alphabet}--{character}'
+OMNIGLOT_METADATASET_TRAIN_NORMALIZER = {
+    'mean': [0.9213101208773438],
+    'std': [0.2628733349463854],
+    'num_dataset_samples': 17660
+}
 
+# class OmniglotTask(ClassificationTask):
 
-class OmniglotTask(ClassificationTask):
+#     def __init__(self,
+#                  support_size: int,
+#                  query_size: int,
+#                  task_data: Dict[str, np.ndarray],
+#                  regenerate_support_set: bool = True,
+#                  regenerate_query_set: bool = False,
+#                  rng: np.random.Generator = None):
+#         super().__init__(support_size=support_size,
+#                          query_size=query_size,
+#                          task_data=task_data,
+#                          regenerate_support_set=regenerate_support_set,
+#                          regenerate_query_set=regenerate_query_set,
+#                          rng=rng)
 
-    def __init__(self,
-                 support_size: int,
-                 query_size: int,
-                 task_data: Dict[str, np.ndarray],
-                 regenerate_support_set: bool = True,
-                 regenerate_query_set: bool = False,
-                 rng: np.random.Generator = None):
-        super().__init__(support_size=support_size,
-                         query_size=query_size,
-                         task_data=task_data,
-                         regenerate_support_set=regenerate_support_set,
-                         regenerate_query_set=regenerate_query_set,
-                         rng=rng)
+#     def _generate_support_set(self) -> None:
+#         """When generating a new support set, sample new samples from all samples - query set.
+#         """
+#         pass
 
-    def _generate_support_set(self) -> None:
-        """When generating a new support set, sample new samples from all samples - query set.
-        """
-        pass
-
-    def _generate_query_set(self) -> None:
-        return super()._generate_query_set()
+#     def _generate_query_set(self) -> None:
+#         return super()._generate_query_set()
 
 
 class OmniglotDataset(BaseMetaClassificationDataset):
@@ -114,7 +118,7 @@ class OmniglotDataset(BaseMetaClassificationDataset):
     ]
     output_img_size = (28, 28)
     # precomputed normalizer using all data in 'images_background'
-    normalizer = None  # TODO precompute normalizer
+    normalizer = OMNIGLOT_METADATASET_TRAIN_NORMALIZER
 
     def __init__(
             self,
@@ -128,7 +132,7 @@ class OmniglotDataset(BaseMetaClassificationDataset):
             regenerate_task_query_set: bool = True,
             dataset_layout: str = 'metadataset',
             seed: int = 0,
-            normalizer: Dict[str, List[float]] = None):
+            normalizer: Dict[str, List[float]] = OMNIGLOT_METADATASET_TRAIN_NORMALIZER):
         super().__init__(data_root_path=data_root_path,
                          n_way_classification=n_way_classification,
                          support_size=support_size,
