@@ -1,11 +1,13 @@
 import sys
 import torch
 import logging
+import copy
 import numpy as np
 from abc import ABC, abstractmethod
 from typing import Dict, List, Tuple, Union
 from torch.utils.data import IterableDataset, get_worker_info
 from matplotlib.figure import Figure
+from ml_utilities.data_utils import Scaler, DummyScaler, get_scaler
 
 LOGGER = logging.getLogger(__name__)
 
@@ -43,12 +45,14 @@ class Task(ABC):
                  query_set: Dict[str, Union[torch.Tensor, np.ndarray]] = {},
                  regenerate_support_set: bool = False,
                  regenerate_query_set: bool = False,
-                 rng: np.random.Generator = None):
+                 rng: np.random.Generator = None,
+                 normalizer: Scaler = DummyScaler()):
         self._rng = rng
         self._support_size = support_size
         self._query_size = query_size
         self.regenerate_support_set = regenerate_support_set
         self.regenerate_query_set = regenerate_query_set
+        self._normalizer = copy.deepcopy(normalizer)
         # Tensors must have batch dimension
         self._support_data = support_set
         self._query_data = query_set
@@ -57,13 +61,13 @@ class Task(ABC):
     def support_set(self) -> Tuple[torch.Tensor, torch.Tensor]:
         if self.regenerate_support_set:
             self._generate_support_set()
-        return self._support_data[SUPPORT_X_KEY], self._support_data[SUPPORT_Y_KEY]
+        return self._normalizer(self._support_data[SUPPORT_X_KEY]), self._support_data[SUPPORT_Y_KEY]
 
     @property
     def query_set(self) -> Tuple[torch.Tensor, torch.Tensor]:
         if self.regenerate_query_set:
             self._generate_query_set()
-        return self._query_data[QUERY_X_KEY], self._query_data[QUERY_Y_KEY]
+        return self._normalizer(self._query_data[QUERY_X_KEY]), self._query_data[QUERY_Y_KEY]
 
     @property
     def support_size(self) -> int:
@@ -132,7 +136,7 @@ class BaseMetaDataset(ABC, IterableDataset):
         self.num_tasks = num_tasks  # number of pregenerated tasks
         self.support_size = support_size
         self.query_size = query_size
-        self.normalizer = normalizer
+        self.normalizer = get_scaler(normalizer)
         self.regenerate_task_support_set = regenerate_task_support_set
         self.regenerate_task_query_set = regenerate_task_query_set
         assert not (not regenerate_task_support_set and regenerate_task_query_set
@@ -180,7 +184,7 @@ class BaseMetaDataset(ABC, IterableDataset):
         self.pregen_task_name_to_index = task_name_to_index
 
     def compute_normalizer(self) -> Dict[str, List[float]]:
-        return DEFAULT_NORMALIZER
+        return {}
 
     def reset_rng(self, seed: int) -> None:
         self._rng = np.random.default_rng(seed=seed)
