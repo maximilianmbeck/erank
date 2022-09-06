@@ -127,7 +127,7 @@ class OmniglotDataset(BaseMetaClassificationDataset):
             support_size: int,
             query_size: int,
             split: str,
-            num_tasks: int = -1,  # TODO change to pregen tasks
+            num_tasks: int = 0,
             regenerate_task_support_set: bool = True,
             regenerate_task_query_set: bool = True,
             dataset_layout: str = 'metadataset',

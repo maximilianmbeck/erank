@@ -185,7 +185,7 @@ class BaseMetaClassificationDataset(BaseMetaDataset):
     def sample_tasks(self, num_tasks: int = 1) -> List[Task]:
         assert num_tasks <= self.n_way_combinations, f'Trying to sample more tasks ({num_tasks}) than available ({self.n_way_combinations})!'
         tasks: List[ClassificationTask] = []
-        if num_tasks < 0:
+        if num_tasks <= 0:
             return tasks
 
         task_set: Set[Tuple[str, ...]] = set()
