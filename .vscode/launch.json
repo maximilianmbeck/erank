@@ -14,6 +14,15 @@
             "justMyCode": false
         },
         {
+            "name": "run.py omniglot reptile dotproduct server",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/run.py",
+            "args": ["--config-name", "config_debug_reptile_omniglot_server.yaml"],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
             "name": "run.py sinus reptile erank local",
             "type": "python",
             "request": "launch",

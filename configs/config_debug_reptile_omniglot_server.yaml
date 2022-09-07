@@ -7,9 +7,9 @@ hydra:
 #######
 run_config:
   exec_type: parallel # sequential
-  hostname: spider
-  gpu_ids: [0, 1, 2, 3]
-  runs_per_gpu: 4
+  hostname: dragonfly
+  gpu_ids: [0]
+  runs_per_gpu: 5
 
   wandb: # wandb config for run_handler, if "wandb: null" then logging to wandb is disabled for run_handler
     init:
@@ -26,14 +26,10 @@ seeds:
 sweep:
   type: grid
   axes:
-    - parameter: trainer.task_batch_size
-      vals: [5, 10] #[1, 5, 10]
+    - parameter: trainer.batch_size
+      vals: [1, 5, 10]
     - parameter: trainer.n_inner_iter
-      vals: [10, 30] #[10, 30, 100]
-    - parameter: trainer.regularizer.regularizer_kwargs.loss_coefficient
-      vals: [0.0, 0.1, 0.5, 1.0, 1.5, 3.0] # [0.0, 0.001, 0.01, 0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 10.]
-    - parameter: trainer.regularizer.type
-      vals: ["dotproduct"] #["erank", "dotproduct"]
+      vals: [3] #[3,5,10]
 
 start_num: 0 # use this to count how often this config is run
 
@@ -42,8 +38,8 @@ config:
   experiment_data:
     entity: jkuiml-fsl # null
     project_name: erank_meta
-    experiment_tag: "7.17"
-    experiment_name: og-${config.experiment_data.experiment_tag}.${start_num}-${config.trainer.regularizer.type}_inf_tasks-loss_coeff-${config.trainer.regularizer.regularizer_kwargs.loss_coefficient}-inner_iter-${config.trainer.n_inner_iter}-task_bs-${config.trainer.task_batch_size} 
+    experiment_tag: "DEBUG"
+    experiment_name: omniglot_reptile_debug #sinus-${config.experiment_data.experiment_tag}-reptile_initial_exps-batch_size_${config.trainer.task_batch_size}-n_inner_iter_${config.trainer.n_inner_iter}
     experiment_dir: null
     seed: 0
     hostname: null # the server on which the run is run, will be filled by run_handler
@@ -99,18 +95,18 @@ config:
 
   trainer:
     training_setup: reptile
-    n_epochs: 50e3 #100e3 # our sine: 1e6 # number of iterations (outer/meta gradient steps)
-    log_train_epoch_every: 10
+    n_epochs: 100e3 # our sine: 1e6 # number of iterations (outer/meta gradient steps)
+    log_train_epoch_every: 1 #10
     log_additional_train_epoch_every_multiplier: 10
     log_additional_logs: False
-    val_every: 100
+    val_every: 10 #2 #10
     val_mode: reg # noreg # use regularization terms
     val_tasks_cfg: # [random / deterministic, num_tasks] #random: sample tasks randomly, on every iteration, # deterministic: use pregenerated tasks # num_tasks=-1 use all available
       selection_type: random
       num_tasks: 10
-    save_every: 100e3
-    early_stopping_patience: 10e3 # no early stopping
-    task_batch_size: XXX # our sine: 10 # meta-batch size (number of tasks sampled per iteration)
+    save_every: 10000
+    early_stopping_patience: null # no early stopping
+    task_batch_size: 5 # our sine: 10 # meta-batch size (number of tasks sampled per iteration)
     optimizer_scheduler:
       optimizer_name: sgd #adamw # TODO implement optimizer state sharing between inner loops
       optimizer_kwargs:
@@ -121,7 +117,7 @@ config:
       optimizer_name: sgd
       optimizer_kwargs:
         lr: 0.01 # our sine: 0.001 # default sine: 0.01
-    n_inner_iter: XXX # 10 #100 #3
+    n_inner_iter: 10 #100 #3
     # val_pred_plots_for_tasks: 0 #1 # Prediction plots for `val_plots` tasks. If int: Uses the first `val_plots` tasks to generate plots
     inner_eval_after_steps: 0 #[0, 1, 2, 3, 5, 10, 20, 30, 50] # null: use default, List[int]: list of steps after, which eval is done
     # log_plot_inner_learning_curves:
@@ -135,11 +131,11 @@ config:
 
     loss: crossentropy
     regularizer:
-      type: XXX #dotproduct # erank # none
+      type: dotproduct # erank # none
       init_type: buffer #weightsdiff #random #buffer
       init_dir_buffer: null
       regularizer_kwargs:
-        loss_coefficient: XXX
+        loss_coefficient: 1.0 #XXX
         buffer_size: ${config.trainer.task_batch_size} #10 # number of directions stored in the buffer
         buffer_mode: backlog # none, backlog, queue
         optim_model_vec_mode: basediff # abs, stepdiff, basediff

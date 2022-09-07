@@ -159,7 +159,7 @@ class ReptileTrainer(SubspaceBaseTrainer):
         # log epoch stats
         if self._log_train_epoch_every > 0 and epoch % self._log_train_epoch_every == 0:
             epoch_stats['meta-grad-norm'] = compute_grad_norm(self._model)
-            if epoch % (self._log_additional_train_epoch_every_multiplier * self._log_train_epoch_every) == 0:
+            if self._log_additional_logs and epoch % (self._log_additional_train_epoch_every_multiplier * self._log_train_epoch_every) == 0:
                 if self._subspace_regularizer:
                     additional_logs = self._subspace_regularizer.get_additional_logs()
                     epoch_stats.update(additional_logs)

@@ -44,7 +44,8 @@ class SubspaceBaseTrainer(BaseTrainer):
         self._subspace_regularizer: SubspaceRegularizer = None
         self._log_train_epoch_every = self.config.trainer.get('log_train_epoch_every', 1)
         self._log_additional_train_epoch_every_multiplier = self.config.trainer.get('log_additional_train_epoch_every_multiplier', 1)
-
+        self._log_additional_logs = self.config.trainer.get('log_additional_logs', False)
+        
     def _setup(self):
         LOGGER.info('Starting wandb.')
         exp_data = self.config.experiment_data
