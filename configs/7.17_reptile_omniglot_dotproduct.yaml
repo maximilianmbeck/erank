@@ -108,7 +108,7 @@ config:
       selection_type: random
       num_tasks: 10
     save_every: 100e3
-    early_stopping_patience: null # no early stopping
+    early_stopping_patience: 10e3 # no early stopping
     task_batch_size: XXX # our sine: 10 # meta-batch size (number of tasks sampled per iteration)
     optimizer_scheduler:
       optimizer_name: sgd #adamw # TODO implement optimizer state sharing between inner loops
@@ -120,7 +120,7 @@ config:
       optimizer_name: sgd
       optimizer_kwargs:
         lr: 0.01 # our sine: 0.001 # default sine: 0.01
-    n_inner_iter: 10 #100 #3
+    n_inner_iter: XXX # 10 #100 #3
     # val_pred_plots_for_tasks: 0 #1 # Prediction plots for `val_plots` tasks. If int: Uses the first `val_plots` tasks to generate plots
     inner_eval_after_steps: 0 #[0, 1, 2, 3, 5, 10, 20, 30, 50] # null: use default, List[int]: list of steps after, which eval is done
     # log_plot_inner_learning_curves:
@@ -134,11 +134,11 @@ config:
 
     loss: crossentropy
     regularizer:
-      type: dotproduct # erank # none
+      type: XXX #dotproduct # erank # none
       init_type: buffer #weightsdiff #random #buffer
       init_dir_buffer: null
       regularizer_kwargs:
-        loss_coefficient: 1.0 #XXX
+        loss_coefficient: XXX
         buffer_size: ${config.trainer.task_batch_size} #10 # number of directions stored in the buffer
         buffer_mode: backlog # none, backlog, queue
         optim_model_vec_mode: basediff # abs, stepdiff, basediff
@@ -154,7 +154,7 @@ config:
     metadataset: omniglot
     n_way_classification: 5
     train_metadataset_kwargs:
-      data_root_path: /home/max/phd/data
+      data_root_path: /system/user/beck/pwbeck/data
       n_way_classification: ${config.data.n_way_classification}
       support_size: 5
       query_size: 10
@@ -164,7 +164,7 @@ config:
       regenerate_task_support_set: True
       regenerate_task_query_set: True
     val_metadataset_kwargs:
-      data_root_path: /home/max/phd/data
+      data_root_path: /system/user/beck/pwbeck/data
       n_way_classification: ${config.data.n_way_classification}
       support_size: 5
       query_size: 10
