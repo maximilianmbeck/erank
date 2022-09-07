@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from torch import nn
 from torch.utils import data
-from omegaconf import DictConfig, ListConfig
+from omegaconf import OmegaConf, DictConfig, ListConfig
 from erank.data import get_metadataset_class
 from erank.data.basemetadataset import support_query_as_minibatch
 from erank.regularization.regularized_loss import LOG_LOSS_TOTAL_KEY
@@ -72,15 +72,27 @@ class ReptileTrainer(SubspaceBaseTrainer):
     def _create_datasets(self) -> None:
         LOGGER.info('Loading train/val dataset.')
         data_cfg = self.config.data
+        train_mds_kwargs = OmegaConf.to_container(data_cfg.train_metadataset_kwargs,
+                                                  resolve=True,
+                                                  throw_on_missing=True)
+        val_mds_kwargs = OmegaConf.to_container(data_cfg.val_metadataset_kwargs, resolve=True, throw_on_missing=True)
+        # set dataset seeds
+        train_seed = self._seed
+        # ensure non-overlapping seeds with worker processes
+        # worder_ids are added to train_seed in data loader (worker ids start from 0)
+        val_seed = train_seed + self._num_workers
+        train_mds_kwargs.update({'seed': train_seed})
+        val_mds_kwargs.update({'seed': val_seed})
+
         # these are datasets of tasks
         # each task has a support and a query set
         metadataset_class = get_metadataset_class(data_cfg.metadataset)
-        train_tasks = metadataset_class(**data_cfg.train_metadataset_kwargs)
-        val_tasks = metadataset_class(**data_cfg.val_metadataset_kwargs)
+        train_tasks = metadataset_class(**train_mds_kwargs)
+        val_tasks = metadataset_class(**val_mds_kwargs)
         self._datasets = dict(train=train_tasks, val=val_tasks)
 
     def _create_dataloaders(self) -> None:
-        num_workers = self.config.trainer.get('num_workers', 0)
+        num_workers = self._num_workers
         if num_workers == 0:
             LOGGER.warning('Number of workers for data loading is zero. Loading data in main process.')
         # use persistent workers so the workers are re-used across episodes (i.e., despite creating new iterators).

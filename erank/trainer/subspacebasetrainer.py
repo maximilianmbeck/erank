@@ -38,7 +38,8 @@ class SubspaceBaseTrainer(BaseTrainer):
                          n_epochs=config.trainer.n_epochs,
                          val_every=config.trainer.val_every,
                          save_every=config.trainer.save_every,
-                         early_stopping_patience=config.trainer.early_stopping_patience)
+                         early_stopping_patience=config.trainer.early_stopping_patience, 
+                         num_workers=config.trainer.num_workers)
         #
         self._subspace_regularizer: SubspaceRegularizer = None
         self._log_train_epoch_every = self.config.trainer.get('log_train_epoch_every', 1)

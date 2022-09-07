@@ -78,7 +78,7 @@ class SinusDataset(BaseMetaDataset):
             self,
             support_size: int = 10,
             query_size: int = 10,
-            num_tasks: int = 10000,
+            num_tasks: int = -1,
             amplitude_range: List[float] = [0.1, 5.0],
             phase_range: List[float] = [0, 2 * 3.14159265359],
             x_range: List[float] = [-5, 5],
