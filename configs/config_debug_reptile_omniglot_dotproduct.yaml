@@ -159,7 +159,6 @@ config:
       # num_tasks: 1000 # we do sample tasks on the fly
       regenerate_task_support_set: True
       regenerate_task_query_set: True
-      seed: ${config.experiment_data.seed}
     val_metadataset_kwargs:
       data_root_path: /home/max/phd/data
       n_way_classification: ${config.data.n_way_classification}
@@ -170,4 +169,3 @@ config:
       # num_tasks: 1000
       regenerate_task_support_set: True
       regenerate_task_query_set: True
-      seed: ${config.experiment_data.seed}
