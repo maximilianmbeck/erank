@@ -96,10 +96,10 @@ class ClassificationTask(Task):
             y_data = np.repeat(self._task_labels[class_name], set_size)
 
             set_x.append(torch.tensor(x_data, dtype=torch.float32))
-            set_y.append(torch.tensor(y_data, dtype=torch.float32))
+            set_y.append(torch.tensor(y_data, dtype=torch.long))
 
         set_x = torch.cat(set_x)  # shape: (batch, data_dims), for image data: data_dims=CxHxW
-        set_y = torch.cat(set_y).unsqueeze(dim=1)  # shape: (batch, 1)
+        set_y = torch.cat(set_y)  # shape: (batch,)
         return set_x, set_y, set_idxes
 
     @property

@@ -41,7 +41,7 @@ class ReptileTrainer(SubspaceBaseTrainer):
         self._task_batch_size = self.config.trainer.task_batch_size
         self._inner_optimizer = self.config.trainer.inner_optimizer
         self._n_inner_iter = self.config.trainer.n_inner_iter
-        self._val_pred_plots_for_tasks = self.config.trainer.val_pred_plots_for_tasks
+        self._val_pred_plots_for_tasks = self.config.trainer.get('val_pred_plots_for_tasks', 0)
         self._log_plot_inner_learning_curves = self.config.trainer.get('log_plot_inner_learning_curves',
                                                                        [LOG_LOSS_TOTAL_KEY])
         self._verbose = self.config.trainer.get('verbose', False)
@@ -63,6 +63,11 @@ class ReptileTrainer(SubspaceBaseTrainer):
         val_mode = self.config.trainer.val_mode
         assert val_mode in ['reg', 'noreg']
         self._val_mode = f'val-{val_mode}'
+
+        val_tasks_cfg = self.config.trainer.get('val_tasks_cfg', {'selection_type': 'deterministic', 'num_tasks': -1})
+        self._val_tasks_selection_type = val_tasks_cfg.selection_type
+        self._val_num_tasks = val_tasks_cfg.num_tasks
+        assert self._val_tasks_selection_type in ['random', 'deterministic']
 
         # running stats
         self._inner_train_step = 0
@@ -284,7 +289,13 @@ class ReptileTrainer(SubspaceBaseTrainer):
         preds_plot_log = {}
 
         # get eval tasks
-        eval_tasks = self._datasets['val'].get_tasks()
+        if self._val_tasks_selection_type == 'deterministic':
+            eval_tasks = self._datasets['val'].get_tasks(num_tasks=self._val_num_tasks)
+        elif self._val_tasks_selection_type == 'random':
+            eval_tasks = self._datasets['val'].sample_tasks(num_tasks=self._val_num_tasks)
+        else: 
+            raise ValueError(f'Unsupported validation task selection type: {self._val_tasks_selection_type}')
+        assert len(eval_tasks) > 0, f'No validation tasks given.'
         # pbar = tqdm(eval_tasks, desc=f'Val epoch {epoch}', file=sys.stdout)
         for task_idx, task in enumerate(eval_tasks):
             LOGGER.debug(f'----Task idx: {task_idx}')
@@ -485,7 +496,7 @@ class ReptileTrainer(SubspaceBaseTrainer):
                     if loss_taskmean[0] > 0.:
                         lim_type = 'u'  # upper limit only
                         self.__inner_learning_curves_ylim[loss_key_to_plot] = (lim_type,
-                                                                               loss_taskmean[0] + 2 * loss_taskstd[0])
+                                                                               loss_taskmean[0] + 3 * loss_taskstd[0])
                     else:
                         lim_type = 'ul'  # upper and lower limit
                         self.__inner_learning_curves_ylim[loss_key_to_plot] = (lim_type, np.abs(loss_taskmean[0]) +

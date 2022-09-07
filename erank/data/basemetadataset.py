@@ -30,7 +30,9 @@ def support_query_as_minibatch(set: Tuple[torch.Tensor, torch.Tensor],
     """
 
     def fun(x):
-        assert len(x.shape) > 1, 'Tensor has too less dimensions. Maybe batch dimension is missing?'
+        # for classification tasks the targets / labels are stored in tensors with dtype=torch.long and shape (batch_size,)
+        assert len(
+            x.shape) > 1 or x.dtype == torch.long, 'Tensor has too less dimensions. Maybe batch dimension is missing?'
         return x.to(device)
 
     return tuple(map(fun, set))
@@ -92,7 +94,7 @@ class Task(ABC):
 
     def _generate_sets(self) -> None:
         """Convenience function to ensure that support and query set are always generated in the correct order upon initialization."""
-        self._generate_support_set() # Mind the order!
+        self._generate_support_set()  # Mind the order!
         self._generate_query_set()
 
     def plot_query_predictions(self, epoch: int, preds: Dict[int, torch.Tensor]) -> Tuple[Figure, str]:
