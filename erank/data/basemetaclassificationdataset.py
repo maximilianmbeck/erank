@@ -231,7 +231,7 @@ class BaseMetaClassificationDataset(BaseMetaDataset):
                                   normalizer=self.normalizer,
                                   regenerate_support_set=self.regenerate_task_support_set,
                                   regenerate_query_set=self.regenerate_task_query_set)
-        return task
+        return copy.deepcopy(task) # deepcopy is necessary for multiple dataloader workers to work
 
     def compute_normalizer(self) -> Dict[str, List[float]]:
         mean = 0.

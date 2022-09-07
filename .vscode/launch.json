@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "run.py omniglot reptile dotproduct local",
+            "name": "run.py omniglot reptile local",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/run.py",
@@ -14,7 +14,7 @@
             "justMyCode": false
         },
         {
-            "name": "run.py omniglot reptile dotproduct server",
+            "name": "run.py omniglot reptile server",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/run.py",

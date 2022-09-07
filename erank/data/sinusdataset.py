@@ -137,4 +137,4 @@ class SinusDataset(BaseMetaDataset):
                          self._rng,
                          regenerate_support_set=self.regenerate_task_support_set)
 
-        return copy.deepcopy(task) # TODO check if deepcopy needed -> probably not!
+        return copy.deepcopy(task) # deepcopy is necessary for multiple dataloader workers to work
