@@ -176,14 +176,14 @@ class BaseMetaDataset(ABC, IterableDataset):
             num_tasks = len(self.pregen_tasks)
         return self.pregen_tasks[start_index:num_tasks].tolist()
 
-    def create_pregen_tasks(self) -> None:
+    def create_pregen_tasks(self) -> Tuple[np.ndarray, Dict[str, int]]:
         """Generate `pregen_tasks`. Default behavior samples tasks randomly via `sample_tasks()`.
         Implement and call this method, when accessing tasks via `get_tasks()`."""
         tasks = self.sample_tasks(self.num_tasks)
         task_name_to_index = {task.name: i for i, task in enumerate(tasks)}
-        self.pregen_tasks = np.array(tasks)
-        self.pregen_tasks.sort()
-        self.pregen_task_name_to_index = task_name_to_index
+        pregen_tasks = np.array(tasks)
+        pregen_tasks.sort()
+        return pregen_tasks, task_name_to_index
 
     def compute_normalizer(self) -> Dict[str, List[float]]:
         return {}

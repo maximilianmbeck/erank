@@ -136,7 +136,7 @@ class OmniglotDataset(BaseMetaClassificationDataset):
         self._data = self._load_data(
             self.split)  # TODO: do this with https://stackoverflow.com/questions/100003/what-are-metaclasses-in-python
         # pre-generate some tasks which are accessed via get task to ensure deterministic behavior
-        self.create_pregen_tasks()
+        self.pregen_tasks, self.pregen_task_name_to_index = self.create_pregen_tasks()
 
     def _load_data(self, split: str) -> Dict[str, np.ndarray]:
         self.__check_dataset()
