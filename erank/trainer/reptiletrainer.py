@@ -146,9 +146,10 @@ class ReptileTrainer(SubspaceBaseTrainer):
         # log epoch stats
         if self._log_train_epoch_every > 0 and epoch % self._log_train_epoch_every == 0:
             epoch_stats['meta-grad-norm'] = compute_grad_norm(self._model)
-            if self._subspace_regularizer:
-                additional_logs = self._subspace_regularizer.get_additional_logs()
-                epoch_stats.update(additional_logs)
+            if epoch % (self._log_additional_train_epoch_every_multiplier * self._log_train_epoch_every) == 0:
+                if self._subspace_regularizer:
+                    additional_logs = self._subspace_regularizer.get_additional_logs()
+                    epoch_stats.update(additional_logs)
 
         #! meta-model gradient step
         # outer loop step / update meta-parameters
@@ -451,7 +452,8 @@ class ReptileTrainer(SubspaceBaseTrainer):
         inner_loss_values: Dict[str, List[float]] = {}
 
         for loss_key_to_plot_ in loss_keys_to_plot:
-            assert isinstance(loss_key_to_plot_, DictConfig), f'Loss key to plot is not specified correctly! Specify as `loss_key: XXX`.'
+            assert isinstance(loss_key_to_plot_,
+                              DictConfig), f'Loss key to plot is not specified correctly! Specify as `loss_key: XXX`.'
             loss_key_to_plot = loss_key_to_plot_['loss_key']
 
             # labels for plots
@@ -487,7 +489,7 @@ class ReptileTrainer(SubspaceBaseTrainer):
                     else:
                         lim_type = 'ul'  # upper and lower limit
                         self.__inner_learning_curves_ylim[loss_key_to_plot] = (lim_type, np.abs(loss_taskmean[0]) +
-                                                                           10 * loss_taskstd[0])
+                                                                               10 * loss_taskstd[0])
             # (lim_type, lower, [upper]), upper is optional
             ylim_tuple = self.__inner_learning_curves_ylim[loss_key_to_plot]
             lim_type = ylim_tuple[0]
