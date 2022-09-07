@@ -1,16 +1,13 @@
 import logging
-import sys
 import copy
-from typing import Dict, Tuple, List, Deque
+from typing import Dict, Tuple, List
 import torch
 import pandas as pd
-import torchmetrics
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from torch import nn
 from torch.utils import data
-from tqdm import tqdm
 from omegaconf import DictConfig, ListConfig
 from erank.data import get_metadataset_class
 from erank.data.basemetadataset import support_query_as_minibatch

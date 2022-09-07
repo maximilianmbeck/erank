@@ -97,7 +97,7 @@ config:
     training_setup: reptile
     n_epochs: 100e3 # our sine: 1e6 # number of iterations (outer/meta gradient steps)
     log_train_epoch_every: 1 #10
-    log_additional_train_epoch_every_multiplier: 20
+    log_additional_train_epoch_every_multiplier: 10
     val_every: 10 #2 #10
     val_mode: reg # noreg # use regularization terms
     val_tasks_cfg: # [random / deterministic, num_tasks] #random: sample tasks randomly, on every iteration, # deterministic: use pregenerated tasks # num_tasks=-1 use all available

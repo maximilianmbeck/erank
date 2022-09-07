@@ -76,6 +76,9 @@ config:
     log_train_epoch_every: 1 #10
     val_every: 2 #10
     val_mode: reg # noreg # use regularization terms
+    val_tasks_cfg: # [random / deterministic, num_tasks] #random: sample tasks randomly, on every iteration, # deterministic: use pregenerated tasks # num_tasks=-1 use all available
+      selection_type: random
+      num_tasks: 10
     save_every: 10000
     early_stopping_patience: null # no early stopping
     task_batch_size: 5 #1 #5 # meta-batch size (number of tasks sampled per iteration)

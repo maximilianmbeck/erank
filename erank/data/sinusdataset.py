@@ -92,30 +92,49 @@ class SinusDataset(BaseMetaDataset):
                          regenerate_task_query_set=regenerate_task_query_set,
                          seed=seed)
         assert len(amplitude_range) == 2 and len(phase_range) == 2 and len(x_range) == 2
-        self.amplitudes = self._rng.uniform(amplitude_range[0], amplitude_range[1], size=num_tasks)
-        self.phases = self._rng.uniform(phase_range[0], phase_range[1], size=num_tasks)
+        self.amplitude_range = amplitude_range
+        self.phase_range = phase_range
         self.x_range = x_range
-        # generate all tasks an hold them in memory
-        self.pregen_tasks, self.pregen_task_name_to_index = self._generate_tasks()
+        # pre-generate some tasks which are accessed via get task to ensure deterministic behavior
+        self.pregen_tasks, self.pregen_task_name_to_index = self.create_pregen_tasks()
 
-    def _generate_tasks(self) -> Tuple[np.ndarray, Dict[str, int]]:
-        tasks = []
-        name_to_index = {}
-        for i in tqdm(range(self.num_tasks), file=sys.stdout, desc='Generating Sinus tasks'):
-            # we need deepcopy to "deepcopy" the internal dictionaries of the tasks
-            task = copy.deepcopy(
-                SinusTask(self.support_size,
-                          self.query_size,
-                          self.amplitudes[i],
-                          self.phases[i],
-                          self.x_range,
-                          self._rng,
-                          regenerate_support_set=self.regenerate_task_support_set))
-            tasks.append(task)
-            name_to_index[task.name] = i
-        return np.array(tasks), name_to_index
+    # def _generate_tasks(self) -> Tuple[np.ndarray, Dict[str, int]]:
+    #     tasks = []
+    #     name_to_index = {}
+
+    #     self.amplitudes = self._rng.uniform(self.amplitude_range[0], self.amplitude_range[1], size=self.num_tasks)
+    #     self.phases = self._rng.uniform(self.phase_range[0], self.phase_range[1], size=self.num_tasks)
+
+    #     for i in tqdm(range(self.num_tasks), file=sys.stdout, desc='Generating Sinus tasks'):
+    #         # we need deepcopy to "deepcopy" the internal dictionaries of the tasks
+    #         task = copy.deepcopy(
+    #             SinusTask(self.support_size,
+    #                       self.query_size,
+    #                       self.amplitudes[i],
+    #                       self.phases[i],
+    #                       self.x_range,
+    #                       self._rng,
+    #                       regenerate_support_set=self.regenerate_task_support_set))
+    #         tasks.append(task)
+    #         name_to_index[task.name] = i
+    #     return np.array(tasks), name_to_index
 
     def sample_tasks(self, num_tasks: int) -> List[SinusTask]:
-        if num_tasks == -1:
-            num_tasks = len(self.pregen_tasks)
-        return self._rng.choice(self.pregen_tasks, size=num_tasks, replace=False).tolist()
+        if num_tasks <= 0:
+            return []
+        tasks = [self._create_task() for _ in range(num_tasks)]
+        return tasks
+
+    def _create_task(self) -> SinusTask:
+        amplitude = self._rng.uniform(self.amplitude_range[0], self.amplitude_range[1])
+        phase = self._rng.uniform(self.phase_range[0], self.phase_range[1])
+
+        task = SinusTask(self.support_size,
+                         self.query_size,
+                         amplitude,
+                         phase,
+                         self.x_range,
+                         self._rng,
+                         regenerate_support_set=self.regenerate_task_support_set)
+
+        return copy.deepcopy(task) # TODO check if deepcopy needed -> probably not!
