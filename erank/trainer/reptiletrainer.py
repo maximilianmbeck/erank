@@ -94,6 +94,7 @@ class ReptileTrainer(SubspaceBaseTrainer):
                                        num_workers=num_workers,
                                        persistent_workers=num_workers > 0)
         self._loaders = dict(train=train_loader)
+        self._train_episode_iter = iter(self._loaders['train'])
 
     def _train_epoch(self, epoch: int) -> None:
         LOGGER.debug(f'--Train epoch: {epoch}')
@@ -103,14 +104,13 @@ class ReptileTrainer(SubspaceBaseTrainer):
         # zero grad of model, since the task updates/gradients will be accumulated there
         self._model.zero_grad()
 
-        episode_iter = iter(self._loaders['train'])
         # parallel version of Reptile (iterate over a batch of tasks)
         # task_batch = self._datasets['train'].sample_tasks(self._task_batch_size)
         # pbar = tqdm(task_batch, desc=f'Train epoch {epoch}', file=sys.stdout) # don't use tqdm for performance reasons
         for task_idx in range(self._task_batch_size):
             LOGGER.debug(f'----Task idx: {task_idx}')
             # sample support and query set
-            task = next(episode_iter)
+            task = next(self._train_episode_iter)
             support_set, query_set = task.support_set, task.query_set
 
             # copy model parameters and do inner-loop learning
