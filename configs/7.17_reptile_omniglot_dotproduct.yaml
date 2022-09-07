@@ -9,7 +9,7 @@ run_config:
   exec_type: parallel # sequential
   hostname: spider
   gpu_ids: [0, 1, 2, 4]
-  runs_per_gpu: 3
+  runs_per_gpu: 4
 
   wandb: # wandb config for run_handler, if "wandb: null" then logging to wandb is disabled for run_handler
     init:
@@ -27,9 +27,9 @@ sweep:
   type: grid
   axes:
     - parameter: trainer.task_batch_size
-      vals: [5] #[1, 5, 10]
+      vals: [5, 10] #[1, 5, 10]
     - parameter: trainer.n_inner_iter
-      vals: [10] #[10, 30, 100]
+      vals: [10, 30] #[10, 30, 100]
     - parameter: trainer.regularizer.regularizer_kwargs.loss_coefficient
       vals: [0.0, 0.1, 0.5, 1.0, 1.5, 3.0] # [0.0, 0.001, 0.01, 0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 10.]
     - parameter: trainer.regularizer.type
@@ -109,7 +109,7 @@ config:
       num_tasks: 10
     save_every: 100e3
     early_stopping_patience: null # no early stopping
-    task_batch_size: 5 # our sine: 10 # meta-batch size (number of tasks sampled per iteration)
+    task_batch_size: XXX # our sine: 10 # meta-batch size (number of tasks sampled per iteration)
     optimizer_scheduler:
       optimizer_name: sgd #adamw # TODO implement optimizer state sharing between inner loops
       optimizer_kwargs:
