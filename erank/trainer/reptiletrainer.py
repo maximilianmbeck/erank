@@ -42,8 +42,7 @@ class ReptileTrainer(SubspaceBaseTrainer):
         self._inner_optimizer = self.config.trainer.inner_optimizer
         self._n_inner_iter = self.config.trainer.n_inner_iter
         self._val_pred_plots_for_tasks = self.config.trainer.get('val_pred_plots_for_tasks', 0)
-        self._log_plot_inner_learning_curves = self.config.trainer.get('log_plot_inner_learning_curves',
-                                                                       [LOG_LOSS_TOTAL_KEY])
+        self._log_plot_inner_learning_curves = self.config.trainer.get('log_plot_inner_learning_curves', [])
         self._verbose = self.config.trainer.get('verbose', False)
 
         self._inner_eval_after_steps = self.config.trainer.get('inner_eval_after_steps', [0])
@@ -293,7 +292,7 @@ class ReptileTrainer(SubspaceBaseTrainer):
             eval_tasks = self._datasets['val'].get_tasks(num_tasks=self._val_num_tasks)
         elif self._val_tasks_selection_type == 'random':
             eval_tasks = self._datasets['val'].sample_tasks(num_tasks=self._val_num_tasks)
-        else: 
+        else:
             raise ValueError(f'Unsupported validation task selection type: {self._val_tasks_selection_type}')
         assert len(eval_tasks) > 0, f'No validation tasks given.'
         # pbar = tqdm(eval_tasks, desc=f'Val epoch {epoch}', file=sys.stdout)
