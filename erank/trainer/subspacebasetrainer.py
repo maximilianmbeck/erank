@@ -52,7 +52,7 @@ class SubspaceBaseTrainer(BaseTrainer):
         wandb.init(entity=exp_data.get('entity', None),
                    project=exp_data.project_name,
                    name=HydraConfig.get().job.name,
-                   dir=Path.cwd(),
+                   dir=str(Path.cwd()),
                    config=OmegaConf.to_container(self.config, resolve=True, throw_on_missing=True),
                    **self.config.wandb.init,
                    settings=wandb.Settings(start_method='fork'))
