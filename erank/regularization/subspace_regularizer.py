@@ -314,7 +314,10 @@ class SubspaceRegularizer(Regularizer):
         #                             center=center_matrix_A,
         #                             niter=1,
         #                             q=min(matrix_A.shape[0], matrix_A.shape[1]))  # check with torch doc.
-        _, s, _ = torch.linalg.svd(matrix_A, full_matrices=False)
+        
+        # _, s, _ = torch.linalg.svd(matrix_A, full_matrices=False)
+        # newer pytorch version supports svdval computation directly
+        s = torch.linalg.svdvals(matrix_A)
 
         # normalizes input s -> scale independent!
         return torch.exp(torch.distributions.Categorical(probs=s).entropy())
