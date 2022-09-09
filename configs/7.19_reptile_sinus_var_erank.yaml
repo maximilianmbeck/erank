@@ -33,9 +33,9 @@ sweep:
     - parameter: trainer.regularizer.regularizer_kwargs.loss_coefficient
       vals: [0.0, 0.1, 0.5, 1.0, 1.5, 3.0, 5.0, 10.] # [0.0, 0.001, 0.01, 0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 10.]
     - parameter: trainer.optimizer_scheduler.optimizer_kwargs.lr
-      vals: [0.1] #[1.0, 0.5, 0.1, 0.01]
+      vals: [1.0] #[0.1] #[1.0, 0.5, 0.1, 0.01]
     - parameter: trainer.inner_optimizer.optimizer_kwargs.lr
-      vals: [0.001] #[0.1, 0.01, 0.001]
+      vals: [0.01] #[0.001] #[0.1, 0.01, 0.001]
     - parameter: [data.amplitude_range, data.phase_range]
       vals: 
         - [0.1, 5.0]        # a
@@ -45,7 +45,7 @@ sweep:
         - [1.0, 1.1]        # a
         - [0, 0.1]          # p
 
-start_num: 0 # use this to count how often this config is run
+start_num: 1 # use this to count how often this config is run
 
 ###
 config:
