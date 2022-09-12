@@ -39,7 +39,7 @@ config:
     entity: jkuiml-fsl # null
     project_name: erank_meta
     experiment_tag: "DEBUG"
-    experiment_name: sinus_reptile_debug #sinus-${config.experiment_data.experiment_tag}-reptile_initial_exps-batch_size_${config.trainer.task_batch_size}-n_inner_iter_${config.trainer.n_inner_iter}
+    experiment_name: omniglot_reptile_debug #sinus-${config.experiment_data.experiment_tag}-reptile_initial_exps-batch_size_${config.trainer.task_batch_size}-n_inner_iter_${config.trainer.n_inner_iter}
     experiment_dir: null
     seed: 0
     hostname: null # the server on which the run is run, will be filled by run_handler
@@ -59,55 +59,83 @@ config:
       log_freq: 5000
 
   model:
-    name: fc
+    name: cnn2d
+    out_channels: 64
     model_kwargs:
-      input_size: 1
-      hidden_sizes:
-        - 64
-        - 64
-      output_size: 1
-      flatten_input: true # can probably use also false
-      dropout: null
+      image_size: 28
+      in_channels: 1
       act_fn: relu
+      layer_configs:
+        - out_channels: ${config.model.out_channels}
+          kernel_size: 3
+          batch_norm: true
+          stride: 1
+          padding: 0
+          max_pool_kernel_size: 2
+        - out_channels: ${config.model.out_channels}
+          kernel_size: 3
+          batch_norm: true
+          stride: 1
+          padding: 0
+          max_pool_kernel_size: 2
+        - out_channels: ${config.model.out_channels}
+          kernel_size: 3
+          batch_norm: true
+          stride: 1
+          padding: 0
+          # max_pool_kernel_size: {mp_kernel_size}
+        - out_channels: ${config.model.out_channels}
+          kernel_size: 3
+          batch_norm: true
+          stride: 1
+          padding: 0
+          # max_pool_kernel_size: {mp_kernel_size}
+      linear_output_units:
+        - ${config.data.n_way_classification}
 
   trainer:
     training_setup: reptile
-    n_epochs: 1e6 # number of iterations (outer/meta gradient steps)
+    n_epochs: 100e3 # our sine: 1e6 # number of iterations (outer/meta gradient steps)
     log_train_epoch_every: 1 #10
-    val_every: 2 #10
+    log_additional_train_epoch_every_multiplier: 10
+    log_additional_logs: True
+    val_every: 10 #2 #10
     val_mode: reg # noreg # use regularization terms
     val_tasks_cfg: # [random / deterministic, num_tasks] #random: sample tasks randomly, on every iteration, # deterministic: use pregenerated tasks # num_tasks=-1 use all available
       selection_type: random
       num_tasks: 10
     save_every: 10000
     early_stopping_patience: null # no early stopping
-    task_batch_size: 5 #1 #5 # meta-batch size (number of tasks sampled per iteration)
+    task_batch_size: 5 # our sine: 10 # meta-batch size (number of tasks sampled per iteration)
     optimizer_scheduler:
       optimizer_name: sgd #adamw # TODO implement optimizer state sharing between inner loops
       optimizer_kwargs:
-        lr: 0.1 #0.001 # default sine: 0.001
+        lr: 1.0 # our sine: 0.1 # default sine: 0.001
         weight_decay: 0.0 #0.001
     init_model: null
     inner_optimizer:
       optimizer_name: sgd
       optimizer_kwargs:
-        lr: 0.001 # default sine: 0.01
+        lr: 0.01 # our sine: 0.001 # default sine: 0.01
     n_inner_iter: 10 #100 #3
-    val_pred_plots_for_tasks: 0 #1 # Prediction plots for `val_plots` tasks. If int: Uses the first `val_plots` tasks to generate plots
+    # val_pred_plots_for_tasks: 0 #1 # Prediction plots for `val_plots` tasks. If int: Uses the first `val_plots` tasks to generate plots
     inner_eval_after_steps: 0 #[0, 1, 2, 3, 5, 10, 20, 30, 50] # null: use default, List[int]: list of steps after, which eval is done
-    log_plot_inner_learning_curves:
-      - loss_key: loss_total
-      - loss_key: loss_MSELoss
-      - loss_key: loss_${config.trainer.regularizer.type}
-        ylimits: [-1, 1] # ylimits of plot [lower, upper]
+    # log_plot_inner_learning_curves:
+    #   - loss_key: loss_total
+    #     # ylimits: [0, 1.8]
+    #   - loss_key: loss_CrossEntropyLoss
+    #     # ylimits: [0, 1.8]
+    #   - loss_key: loss_${config.trainer.regularizer.type}
+    #     ylimits: [-1, 1] # for dotproduct ylimits of plot [lower, upper]
+    #     # ylimits: [0, ${config.trainer.task_batch_size}] # for erank ylimits of plot [lower, upper]
 
-    loss: mse
+    loss: crossentropy
     regularizer:
       type: dotproduct # erank # none
       init_type: buffer #weightsdiff #random #buffer
       init_dir_buffer: null
       regularizer_kwargs:
-        loss_coefficient: 3.0 #1.0 #XXX
+        loss_coefficient: 1.0 #XXX
         buffer_size: ${config.trainer.task_batch_size} #10 # number of directions stored in the buffer
         buffer_mode: backlog # none, backlog, queue
         optim_model_vec_mode: basediff # abs, stepdiff, basediff
@@ -115,27 +143,30 @@ config:
         track_last_n_model_steps: 0
         normalize_dir_matrix_m: False
     metrics:
-      - MeanSquaredError
-    num_workers: 4
+      - Accuracy
+    num_workers: 4 #4
     verbose: False #True
 
   data:
-    metadataset: sinus
+    metadataset: omniglot
+    n_way_classification: 5
     train_metadataset_kwargs:
-      support_size: 10
-      query_size: 50
-      # num_tasks: 1000 #10000
-      amplitude_range: [0.1, 5.0]
-      phase_range: [0, 6.283185307]
-      x_range: [-5, 5]
-      regenerate_task_support_set: False
-      # seed: ${config.experiment_data.seed} # do seeding in code
+      data_root_path: /system/user/beck/pwbeck/data
+      n_way_classification: ${config.data.n_way_classification}
+      support_size: 5
+      query_size: 10
+      dataset_layout: metadataset
+      split: train
+      # num_tasks: 1000 # we do sample tasks on the fly
+      regenerate_task_support_set: True
+      regenerate_task_query_set: True
     val_metadataset_kwargs:
-      support_size: 10
-      query_size: 50
-      # num_tasks: 10 #100 #1000
-      amplitude_range: [0.1, 5.0]
-      phase_range: [0, 6.283185307]
-      x_range: [-5, 5]
-      regenerate_task_support_set: False
-      # seed: ${config.experiment_data.seed} # doo seeding in code
+      data_root_path: /system/user/beck/pwbeck/data
+      n_way_classification: ${config.data.n_way_classification}
+      support_size: 5
+      query_size: 10
+      dataset_layout: metadataset
+      split: test
+      # num_tasks: 1000
+      regenerate_task_support_set: True
+      regenerate_task_query_set: True

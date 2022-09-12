@@ -1,17 +1,14 @@
 import logging
-import sys
 import copy
-from typing import Dict, Tuple, List, Deque
+from typing import Dict, Tuple, List
 import torch
 import pandas as pd
-import torchmetrics
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from torch import nn
 from torch.utils import data
-from tqdm import tqdm
-from omegaconf import DictConfig, ListConfig
+from omegaconf import OmegaConf, DictConfig, ListConfig
 from erank.data import get_metadataset_class
 from erank.data.basemetadataset import support_query_as_minibatch
 from erank.regularization.regularized_loss import LOG_LOSS_TOTAL_KEY
@@ -41,9 +38,8 @@ class ReptileTrainer(SubspaceBaseTrainer):
         self._task_batch_size = self.config.trainer.task_batch_size
         self._inner_optimizer = self.config.trainer.inner_optimizer
         self._n_inner_iter = self.config.trainer.n_inner_iter
-        self._val_pred_plots_for_tasks = self.config.trainer.val_pred_plots_for_tasks
-        self._log_plot_inner_learning_curves = self.config.trainer.get('log_plot_inner_learning_curves',
-                                                                       [LOG_LOSS_TOTAL_KEY])
+        self._val_pred_plots_for_tasks = self.config.trainer.get('val_pred_plots_for_tasks', 0)
+        self._log_plot_inner_learning_curves = self.config.trainer.get('log_plot_inner_learning_curves', [])
         self._verbose = self.config.trainer.get('verbose', False)
 
         self._inner_eval_after_steps = self.config.trainer.get('inner_eval_after_steps', [0])
@@ -64,6 +60,11 @@ class ReptileTrainer(SubspaceBaseTrainer):
         assert val_mode in ['reg', 'noreg']
         self._val_mode = f'val-{val_mode}'
 
+        val_tasks_cfg = self.config.trainer.get('val_tasks_cfg', {'selection_type': 'deterministic', 'num_tasks': -1})
+        self._val_tasks_selection_type = val_tasks_cfg.selection_type
+        self._val_num_tasks = val_tasks_cfg.num_tasks
+        assert self._val_tasks_selection_type in ['random', 'deterministic']
+
         # running stats
         self._inner_train_step = 0
         self.__inner_learning_curves_ylim: Dict[str, float] = {}
@@ -71,15 +72,27 @@ class ReptileTrainer(SubspaceBaseTrainer):
     def _create_datasets(self) -> None:
         LOGGER.info('Loading train/val dataset.')
         data_cfg = self.config.data
+        train_mds_kwargs = OmegaConf.to_container(data_cfg.train_metadataset_kwargs,
+                                                  resolve=True,
+                                                  throw_on_missing=True)
+        val_mds_kwargs = OmegaConf.to_container(data_cfg.val_metadataset_kwargs, resolve=True, throw_on_missing=True)
+        # set dataset seeds
+        train_seed = self._seed
+        # ensure non-overlapping seeds with worker processes
+        # worder_ids are added to train_seed in data loader (worker ids start from 0)
+        val_seed = train_seed + self._num_workers
+        train_mds_kwargs.update({'seed': train_seed})
+        val_mds_kwargs.update({'seed': val_seed})
+
         # these are datasets of tasks
         # each task has a support and a query set
         metadataset_class = get_metadataset_class(data_cfg.metadataset)
-        train_tasks = metadataset_class(**data_cfg.train_metadataset_kwargs)
-        val_tasks = metadataset_class(**data_cfg.val_metadataset_kwargs)
+        train_tasks = metadataset_class(**train_mds_kwargs)
+        val_tasks = metadataset_class(**val_mds_kwargs)
         self._datasets = dict(train=train_tasks, val=val_tasks)
 
     def _create_dataloaders(self) -> None:
-        num_workers = self.config.trainer.get('num_workers', 0)
+        num_workers = self._num_workers
         if num_workers == 0:
             LOGGER.warning('Number of workers for data loading is zero. Loading data in main process.')
         # use persistent workers so the workers are re-used across episodes (i.e., despite creating new iterators).
@@ -89,6 +102,7 @@ class ReptileTrainer(SubspaceBaseTrainer):
                                        num_workers=num_workers,
                                        persistent_workers=num_workers > 0)
         self._loaders = dict(train=train_loader)
+        self._train_episode_iter = iter(self._loaders['train'])
 
     def _train_epoch(self, epoch: int) -> None:
         LOGGER.debug(f'--Train epoch: {epoch}')
@@ -98,14 +112,13 @@ class ReptileTrainer(SubspaceBaseTrainer):
         # zero grad of model, since the task updates/gradients will be accumulated there
         self._model.zero_grad()
 
-        episode_iter = iter(self._loaders['train'])
         # parallel version of Reptile (iterate over a batch of tasks)
         # task_batch = self._datasets['train'].sample_tasks(self._task_batch_size)
         # pbar = tqdm(task_batch, desc=f'Train epoch {epoch}', file=sys.stdout) # don't use tqdm for performance reasons
         for task_idx in range(self._task_batch_size):
             LOGGER.debug(f'----Task idx: {task_idx}')
             # sample support and query set
-            task = next(episode_iter)
+            task = next(self._train_episode_iter)
             support_set, query_set = task.support_set, task.query_set
 
             # copy model parameters and do inner-loop learning
@@ -146,9 +159,10 @@ class ReptileTrainer(SubspaceBaseTrainer):
         # log epoch stats
         if self._log_train_epoch_every > 0 and epoch % self._log_train_epoch_every == 0:
             epoch_stats['meta-grad-norm'] = compute_grad_norm(self._model)
-            if self._subspace_regularizer:
-                additional_logs = self._subspace_regularizer.get_additional_logs()
-                epoch_stats.update(additional_logs)
+            if self._log_additional_logs and epoch % (self._log_additional_train_epoch_every_multiplier * self._log_train_epoch_every) == 0:
+                if self._subspace_regularizer:
+                    additional_logs = self._subspace_regularizer.get_additional_logs()
+                    epoch_stats.update(additional_logs)
 
         #! meta-model gradient step
         # outer loop step / update meta-parameters
@@ -283,7 +297,13 @@ class ReptileTrainer(SubspaceBaseTrainer):
         preds_plot_log = {}
 
         # get eval tasks
-        eval_tasks = self._datasets['val'].get_tasks()
+        if self._val_tasks_selection_type == 'deterministic':
+            eval_tasks = self._datasets['val'].get_tasks(num_tasks=self._val_num_tasks)
+        elif self._val_tasks_selection_type == 'random':
+            eval_tasks = self._datasets['val'].sample_tasks(num_tasks=self._val_num_tasks)
+        else:
+            raise ValueError(f'Unsupported validation task selection type: {self._val_tasks_selection_type}')
+        assert len(eval_tasks) > 0, f'No validation tasks given.'
         # pbar = tqdm(eval_tasks, desc=f'Val epoch {epoch}', file=sys.stdout)
         for task_idx, task in enumerate(eval_tasks):
             LOGGER.debug(f'----Task idx: {task_idx}')
@@ -451,7 +471,8 @@ class ReptileTrainer(SubspaceBaseTrainer):
         inner_loss_values: Dict[str, List[float]] = {}
 
         for loss_key_to_plot_ in loss_keys_to_plot:
-            assert isinstance(loss_key_to_plot_, DictConfig), f'Loss key to plot is not specified correctly! Specify as `loss_key: XXX`.'
+            assert isinstance(loss_key_to_plot_,
+                              DictConfig), f'Loss key to plot is not specified correctly! Specify as `loss_key: XXX`.'
             loss_key_to_plot = loss_key_to_plot_['loss_key']
 
             # labels for plots
@@ -483,11 +504,11 @@ class ReptileTrainer(SubspaceBaseTrainer):
                     if loss_taskmean[0] > 0.:
                         lim_type = 'u'  # upper limit only
                         self.__inner_learning_curves_ylim[loss_key_to_plot] = (lim_type,
-                                                                               loss_taskmean[0] + 2 * loss_taskstd[0])
+                                                                               loss_taskmean[0] + 3 * loss_taskstd[0])
                     else:
                         lim_type = 'ul'  # upper and lower limit
                         self.__inner_learning_curves_ylim[loss_key_to_plot] = (lim_type, np.abs(loss_taskmean[0]) +
-                                                                           10 * loss_taskstd[0])
+                                                                               10 * loss_taskstd[0])
             # (lim_type, lower, [upper]), upper is optional
             ylim_tuple = self.__inner_learning_curves_ylim[loss_key_to_plot]
             lim_type = ylim_tuple[0]

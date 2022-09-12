@@ -4,6 +4,9 @@ import numpy as np
 from torch import nn
 from erank.regularization.subspace_regularizer import SubspaceRegularizer
 
+EPSILON_ORIGIN_STD = 1e-8
+MIN_MEAN_VEC_NORM = 1e-8
+
 
 class DotProductRegularizer(SubspaceRegularizer):
 
@@ -20,7 +23,9 @@ class DotProductRegularizer(SubspaceRegularizer):
             subspace_vecs_mode: str,  # abs, initdiff, basediff
             track_last_n_model_steps: int = 2,
             normalize_dir_matrix_m: bool = False,
-            loss_coefficient_learnable: bool = False):
+            loss_coefficient_learnable: bool = False,
+            epsilon_origin_std: float = EPSILON_ORIGIN_STD,
+            min_mean_vec_norm: float = MIN_MEAN_VEC_NORM):
         super().__init__(name=DotProductRegularizer.name,
                          init_model=init_model,
                          device=device,
@@ -33,20 +38,27 @@ class DotProductRegularizer(SubspaceRegularizer):
                          normalize_dir_matrix_m=normalize_dir_matrix_m,
                          loss_coefficient_learnable=loss_coefficient_learnable)
 
+        self._epsilon_origin_std = epsilon_origin_std
+        self._min_mean_vec_norm = min_mean_vec_norm
+
     def _calculate_mean_subspace_vec(self) -> torch.Tensor:
         # update subspace vecs
         if self.buffer_mode == 'queue':
             self._subspace_vecs.data = self._create_subspace_vecs_from_buffer(self.subspace_vec_buffer)
-        
+
         #! Variant 1: first normalize then average
         # Problem: this might "upweight" unimportant directions
         # subspace_vecs_normalized = self._subspace_vecs / torch.linalg.norm(
         #     self._subspace_vecs, ord=2, dim=1, keepdim=True)
         # mean_subspace_vec_normalized = subspace_vecs_normalized.mean(dim=0)  # shape: (n_model_params,)
-        
+
         #! Variant 2: first average then normalize
         mean_subspace_vec = self._subspace_vecs.mean(dim=0)
-        mean_subspace_vec_normalized = mean_subspace_vec / torch.linalg.norm(mean_subspace_vec, ord=2, dim=0, keepdim=True)
+        if torch.linalg.norm(mean_subspace_vec, ord=2, dim=0) < self._min_mean_vec_norm:
+            mean_subspace_vec += self._epsilon_origin_std * torch.randn_like(mean_subspace_vec, requires_grad=False)
+        
+        mean_subspace_vec_normalized = mean_subspace_vec / torch.linalg.norm(
+            mean_subspace_vec, ord=2, dim=0, keepdim=True)
 
         return mean_subspace_vec_normalized
 

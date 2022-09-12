@@ -63,8 +63,8 @@ config:
     model_kwargs:
       input_size: 1
       hidden_sizes:
-        - 64
-        - 64
+        - 40
+        - 40
       output_size: 1
       flatten_input: true # can probably use also false
       dropout: null
@@ -74,14 +74,15 @@ config:
     training_setup: reptile
     n_epochs: 1e6 # number of iterations (outer/meta gradient steps)
     log_train_epoch_every: 1 #10
-    val_every: 2 #10
-    val_mode: reg # noreg # use regularization terms
+    log_additional_logs: False
+    val_every: 2
+    val_mode: reg # noreg: do not use regularizers, reg: use regularizers
     val_tasks_cfg: # [random / deterministic, num_tasks] #random: sample tasks randomly, on every iteration, # deterministic: use pregenerated tasks # num_tasks=-1 use all available
       selection_type: random
       num_tasks: 10
     save_every: 10000
     early_stopping_patience: null # no early stopping
-    task_batch_size: 5 #1 #5 # meta-batch size (number of tasks sampled per iteration)
+    task_batch_size: 10 #1 #5 # meta-batch size (number of tasks sampled per iteration)
     optimizer_scheduler:
       optimizer_name: sgd #adamw # TODO implement optimizer state sharing between inner loops
       optimizer_kwargs:
@@ -103,15 +104,15 @@ config:
 
     loss: mse
     regularizer:
-      type: dotproduct # erank # none
+      type: erank # dotprod # none
       init_type: buffer #weightsdiff #random #buffer
       init_dir_buffer: null
       regularizer_kwargs:
-        loss_coefficient: 3.0 #1.0 #XXX
+        loss_coefficient: 1.0 #XXX
         buffer_size: ${config.trainer.task_batch_size} #10 # number of directions stored in the buffer
         buffer_mode: backlog # none, backlog, queue
-        optim_model_vec_mode: basediff # abs, stepdiff, basediff
-        subspace_vecs_mode: basediff # abs, initdiff, basediff
+        optim_model_vec_mode: basediff #abs #basediff # abs, stepdiff, basediff
+        subspace_vecs_mode: basediff #abs #basediff # abs, initdiff, basediff
         track_last_n_model_steps: 0
         normalize_dir_matrix_m: False
     metrics:
@@ -124,18 +125,18 @@ config:
     train_metadataset_kwargs:
       support_size: 10
       query_size: 50
-      # num_tasks: 1000 #10000
+      num_tasks: 1000 #10000
       amplitude_range: [0.1, 5.0]
       phase_range: [0, 6.283185307]
       x_range: [-5, 5]
       regenerate_task_support_set: False
-      # seed: ${config.experiment_data.seed} # do seeding in code
+      seed: ${config.experiment_data.seed}
     val_metadataset_kwargs:
       support_size: 10
       query_size: 50
-      # num_tasks: 10 #100 #1000
+      num_tasks: 10 #100 #1000
       amplitude_range: [0.1, 5.0]
       phase_range: [0, 6.283185307]
       x_range: [-5, 5]
       regenerate_task_support_set: False
-      # seed: ${config.experiment_data.seed} # doo seeding in code
+      seed: 1 # different from train dataset

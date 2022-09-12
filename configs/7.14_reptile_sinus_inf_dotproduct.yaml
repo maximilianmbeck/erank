@@ -8,8 +8,8 @@ hydra:
 run_config:
   exec_type: parallel # sequential
   hostname: dragonfly
-  gpu_ids: [0]
-  runs_per_gpu: 5
+  gpu_ids: [0, 1, 2, 3]
+  runs_per_gpu: 3
 
   wandb: # wandb config for run_handler, if "wandb: null" then logging to wandb is disabled for run_handler
     init:
@@ -26,10 +26,12 @@ seeds:
 sweep:
   type: grid
   axes:
-    - parameter: trainer.batch_size
-      vals: [1, 5, 10]
+    - parameter: trainer.task_batch_size
+      vals: [10] #[1, 5, 10]
     - parameter: trainer.n_inner_iter
-      vals: [3] #[3,5,10]
+      vals: [100] #[10, 30, 100]
+    - parameter: trainer.regularizer.regularizer_kwargs.loss_coefficient
+      vals: [0.0, 0.001, 0.01, 0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 10.]
 
 start_num: 0 # use this to count how often this config is run
 
@@ -38,8 +40,8 @@ config:
   experiment_data:
     entity: jkuiml-fsl # null
     project_name: erank_meta
-    experiment_tag: "DEBUG"
-    experiment_name: sinus_reptile_debug #sinus-${config.experiment_data.experiment_tag}-reptile_initial_exps-batch_size_${config.trainer.task_batch_size}-n_inner_iter_${config.trainer.n_inner_iter}
+    experiment_tag: "7.14"
+    experiment_name: sinus-${config.experiment_data.experiment_tag}.${start_num}-${config.trainer.regularizer.type}_inf_tasks-loss_coeff-${config.trainer.regularizer.regularizer_kwargs.loss_coefficient}-task_bs-${config.trainer.task_batch_size}-inner_iter-${config.trainer.n_inner_iter}
     experiment_dir: null
     seed: 0
     hostname: null # the server on which the run is run, will be filled by run_handler
@@ -49,8 +51,8 @@ config:
     init:
       tags: # list(), used to tag wandblogger
         - ${config.experiment_data.experiment_tag}_exps
-        - erank
-      notes: Hyperparametersearch for own Reptile implementation # str, used to make notes to wandblogger
+        - dotproduct
+      notes: Try dotproduct reg with larger sinusdataset. # str, used to make notes to wandblogger
       group: ${config.experiment_data.experiment_tag} # null
       job_type: startnum_${start_num} # examples: hypsearch, pretrain, eval, etc.
 
@@ -63,8 +65,8 @@ config:
     model_kwargs:
       input_size: 1
       hidden_sizes:
-        - 64
-        - 64
+        - 40
+        - 40
       output_size: 1
       flatten_input: true # can probably use also false
       dropout: null
@@ -72,16 +74,16 @@ config:
 
   trainer:
     training_setup: reptile
-    n_epochs: 1e6 # number of iterations (outer/meta gradient steps)
-    log_train_epoch_every: 1 #10
-    val_every: 2 #10
-    val_mode: reg # noreg # use regularization terms
+    n_epochs: 10e6 # number of iterations (outer/meta gradient steps)
+    log_train_epoch_every: 20 #10
+    val_every: 0.5e3
+    val_mode: reg # noreg: do not use regularizers, reg: use regularizers
     val_tasks_cfg: # [random / deterministic, num_tasks] #random: sample tasks randomly, on every iteration, # deterministic: use pregenerated tasks # num_tasks=-1 use all available
       selection_type: random
-      num_tasks: 10
-    save_every: 10000
-    early_stopping_patience: null # no early stopping
-    task_batch_size: 5 #1 #5 # meta-batch size (number of tasks sampled per iteration)
+      num_tasks: 5
+    save_every: 10e6 # do not save during training manually
+    early_stopping_patience: 15e3 # outer update steps
+    task_batch_size: XXX #1 #5 # meta-batch size (number of tasks sampled per iteration)
     optimizer_scheduler:
       optimizer_name: sgd #adamw # TODO implement optimizer state sharing between inner loops
       optimizer_kwargs:
@@ -92,14 +94,14 @@ config:
       optimizer_name: sgd
       optimizer_kwargs:
         lr: 0.001 # default sine: 0.01
-    n_inner_iter: 10 #100 #3
-    val_pred_plots_for_tasks: 0 #1 # Prediction plots for `val_plots` tasks. If int: Uses the first `val_plots` tasks to generate plots
+    n_inner_iter: XXX #100 #3
+    # val_pred_plots_for_tasks: 0 #2 # Prediction plots for `val_plots` tasks. If int: Uses the first `val_plots` tasks to generate plots
     inner_eval_after_steps: 0 #[0, 1, 2, 3, 5, 10, 20, 30, 50] # null: use default, List[int]: list of steps after, which eval is done
-    log_plot_inner_learning_curves:
-      - loss_key: loss_total
-      - loss_key: loss_MSELoss
-      - loss_key: loss_${config.trainer.regularizer.type}
-        ylimits: [-1, 1] # ylimits of plot [lower, upper]
+    # log_plot_inner_learning_curves:
+    #   - loss_key: loss_total
+    #   - loss_key: loss_MSELoss
+    #   - loss_key: loss_${config.trainer.regularizer.type}
+    #     ylimits: [-1, 1] # ylimits of plot [lower, upper]
 
     loss: mse
     regularizer:
@@ -107,11 +109,11 @@ config:
       init_type: buffer #weightsdiff #random #buffer
       init_dir_buffer: null
       regularizer_kwargs:
-        loss_coefficient: 3.0 #1.0 #XXX
+        loss_coefficient: XXX
         buffer_size: ${config.trainer.task_batch_size} #10 # number of directions stored in the buffer
         buffer_mode: backlog # none, backlog, queue
-        optim_model_vec_mode: basediff # abs, stepdiff, basediff
-        subspace_vecs_mode: basediff # abs, initdiff, basediff
+        optim_model_vec_mode: basediff #abs #basediff # abs, stepdiff, basediff
+        subspace_vecs_mode: basediff #abs #basediff # abs, initdiff, basediff
         track_last_n_model_steps: 0
         normalize_dir_matrix_m: False
     metrics:
@@ -124,18 +126,14 @@ config:
     train_metadataset_kwargs:
       support_size: 10
       query_size: 50
-      # num_tasks: 1000 #10000
       amplitude_range: [0.1, 5.0]
       phase_range: [0, 6.283185307]
       x_range: [-5, 5]
       regenerate_task_support_set: False
-      # seed: ${config.experiment_data.seed} # do seeding in code
     val_metadataset_kwargs:
       support_size: 10
       query_size: 50
-      # num_tasks: 10 #100 #1000
       amplitude_range: [0.1, 5.0]
       phase_range: [0, 6.283185307]
       x_range: [-5, 5]
       regenerate_task_support_set: False
-      # seed: ${config.experiment_data.seed} # doo seeding in code

@@ -1,12 +1,12 @@
+from typing import Dict, List, Tuple
 import sys
-from matplotlib.figure import Figure
 import torch
 import copy
 import numpy as np
-from typing import Dict, List, Tuple
 
 from tqdm import tqdm
-from erank.data.basemetadataset import QUERY_X_KEY, QUERY_Y_KEY, SUPPORT_X_KEY, SUPPORT_Y_KEY, BaseMetaDataset, Task
+from matplotlib.figure import Figure
+from erank.data.basemetadataset import BaseMetaDataset, Task, QUERY_X_KEY, QUERY_Y_KEY, SUPPORT_X_KEY, SUPPORT_Y_KEY
 from ml_utilities.torch_utils import to_ndarray
 import matplotlib.pyplot as plt
 
@@ -20,17 +20,18 @@ class SinusTask(Task):
                  phase: float,
                  x_range: List[float],
                  rng: np.random.Generator = None,
-                 regenerate_support_set: bool = False):
-        super().__init__(rng=rng)
-        self._support_size = support_size
-        self._query_size = query_size
+                 regenerate_support_set: bool = False,
+                 regenerate_query_set: bool = False):
+        super().__init__(support_size=support_size,
+                         query_size=query_size,
+                         regenerate_support_set=regenerate_support_set,
+                         regenerate_query_set=regenerate_query_set,
+                         rng=rng)
         self.amplitude = amplitude
         self.phase = phase
-        self.regenerate_support_set = regenerate_support_set
         self.x_range = x_range
 
-        self._generate_support_set()
-        self._generate_query_set()
+        self._generate_sets()
 
     @property
     def name(self) -> str:
@@ -70,62 +71,70 @@ class SinusTask(Task):
         fname = f'epoch-{epoch:05d}-querypred-task-{self.name}.png'
         return fig, fname
 
-    @property
-    def support_set(self) -> Tuple[torch.Tensor, torch.Tensor]:
-        if self.regenerate_support_set:
-            self._generate_support_set()
-        return self._support_data[SUPPORT_X_KEY], self._support_data[SUPPORT_Y_KEY]
-
 
 class SinusDataset(BaseMetaDataset):
 
     def __init__(
-        self,
-        support_size: int = 10,
-        query_size: int = 10,
-        num_tasks: int = 10000,
-        amplitude_range: List[float] = [0.1, 5.0],
-        phase_range: List[float] = [0, 2 * 3.14159265359],
-        x_range: List[float] = [-5, 5],
-        regenerate_task_support_set: bool = False,  # regenerate support set on each call
-        seed: int = 0):  # seed used for task generation, support and query samples
-        super().__init__(support_size=support_size, query_size=query_size, num_tasks=num_tasks, seed=seed)
+            self,
+            support_size: int = 10,
+            query_size: int = 10,
+            num_tasks: int = -1,
+            amplitude_range: List[float] = [0.1, 5.0],
+            phase_range: List[float] = [0, 2 * 3.14159265359],
+            x_range: List[float] = [-5, 5],
+            regenerate_task_support_set: bool = False,  # regenerate support set on each call
+            regenerate_task_query_set: bool = False,
+            seed: int = 0):  # seed used for task generation, support and query samples
+        super().__init__(support_size=support_size,
+                         query_size=query_size,
+                         num_tasks=num_tasks,
+                         regenerate_task_support_set=regenerate_task_support_set,
+                         regenerate_task_query_set=regenerate_task_query_set,
+                         seed=seed)
         assert len(amplitude_range) == 2 and len(phase_range) == 2 and len(x_range) == 2
-        self.amplitudes = self._rng.uniform(amplitude_range[0], amplitude_range[1], size=num_tasks)
-        self.phases = self._rng.uniform(phase_range[0], phase_range[1], size=num_tasks)
+        self.amplitude_range = amplitude_range
+        self.phase_range = phase_range
         self.x_range = x_range
-        self.regenerate_task_support_set = regenerate_task_support_set
-        # generate all tasks an hold them in memory
-        self.tasks: np.ndarray = None
-        self.task_name_to_index: Dict[str, int] = None
-        self.tasks, self.task_name_to_index = self._generate_tasks()
+        # pre-generate some tasks which are accessed via get task to ensure deterministic behavior
+        self.pregen_tasks, self.pregen_task_name_to_index = self.create_pregen_tasks()
 
-    def _generate_tasks(self) -> Tuple[np.ndarray, Dict[str, int]]:
-        tasks = []
-        name_to_index = {}
-        for i in tqdm(range(self.num_tasks), file=sys.stdout, desc='Generating Sinus tasks'):
-            # we need deepcopy to "deepcopy" the internal dictionaries of the tasks
-            task = copy.deepcopy(
-                SinusTask(self.support_size,
-                          self.query_size,
-                          self.amplitudes[i],
-                          self.phases[i],
-                          self.x_range,
-                          self._rng,
-                          regenerate_support_set=self.regenerate_task_support_set))
-            tasks.append(task)
-            name_to_index[task.name] = i
-        return np.array(tasks), name_to_index
+    # def _generate_tasks(self) -> Tuple[np.ndarray, Dict[str, int]]:
+    #     tasks = []
+    #     name_to_index = {}
+
+    #     self.amplitudes = self._rng.uniform(self.amplitude_range[0], self.amplitude_range[1], size=self.num_tasks)
+    #     self.phases = self._rng.uniform(self.phase_range[0], self.phase_range[1], size=self.num_tasks)
+
+    #     for i in tqdm(range(self.num_tasks), file=sys.stdout, desc='Generating Sinus tasks'):
+    #         # we need deepcopy to "deepcopy" the internal dictionaries of the tasks
+    #         task = copy.deepcopy(
+    #             SinusTask(self.support_size,
+    #                       self.query_size,
+    #                       self.amplitudes[i],
+    #                       self.phases[i],
+    #                       self.x_range,
+    #                       self._rng,
+    #                       regenerate_support_set=self.regenerate_task_support_set))
+    #         tasks.append(task)
+    #         name_to_index[task.name] = i
+    #     return np.array(tasks), name_to_index
 
     def sample_tasks(self, num_tasks: int) -> List[SinusTask]:
-        if num_tasks == -1:
-            num_tasks = len(self.tasks)
-        return self._rng.choice(self.tasks, size=num_tasks, replace=False).tolist()
+        if num_tasks <= 0:
+            return []
+        tasks = [self._create_task() for _ in range(num_tasks)]
+        return tasks
 
-    def get_tasks(self, num_tasks: int = -1) -> List[Task]:
-        if num_tasks == -1:
-            num_tasks = len(self.tasks)
-        return self.tasks[:num_tasks].tolist()
+    def _create_task(self) -> SinusTask:
+        amplitude = self._rng.uniform(self.amplitude_range[0], self.amplitude_range[1])
+        phase = self._rng.uniform(self.phase_range[0], self.phase_range[1])
 
-    def get_task(self, task_name: str) -> Task:
-        return self.tasks[self.task_name_to_index[task_name]]
+        task = SinusTask(self.support_size,
+                         self.query_size,
+                         amplitude,
+                         phase,
+                         self.x_range,
+                         self._rng,
+                         regenerate_support_set=self.regenerate_task_support_set)
+
+        return copy.deepcopy(task) # deepcopy is necessary for multiple dataloader workers to work
