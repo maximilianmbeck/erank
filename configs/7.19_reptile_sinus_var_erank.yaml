@@ -35,7 +35,7 @@ sweep:
     - parameter: trainer.optimizer_scheduler.optimizer_kwargs.lr
       vals: [1.0] #[0.1] #[1.0, 0.5, 0.1, 0.01]
     - parameter: trainer.inner_optimizer.optimizer_kwargs.lr
-      vals: [0.01] #[0.001] #[0.1, 0.01, 0.001]
+      vals: [0.005] #[0.01] #[0.001] #[0.1, 0.01, 0.001]
     - parameter: [data.amplitude_range, data.phase_range]
       vals: 
         - [0.1, 5.0]        # a
@@ -45,7 +45,7 @@ sweep:
         - [1.0, 1.1]        # a
         - [0, 0.1]          # p
 
-start_num: 1 # use this to count how often this config is run
+start_num: 2 # use this to count how often this config is run
 
 ###
 config:
