@@ -13,7 +13,9 @@ class SupervisedMetaDatasetWrapper(object):
         metadataset_class = get_metadataset_class(metadataset)
         self.metadataset = metadataset_class(**metadataset_kwargs)
 
-    def get_meta_task(self, idx: int) -> Task:
+    def get_meta_task(self, idx: int = -1) -> Task:
+        if idx == -1:
+            idx = self._task_idx
         return self.metadataset.get_tasks(start_index=idx, num_tasks=1)[0]
 
     @property

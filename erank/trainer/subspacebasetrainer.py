@@ -38,14 +38,16 @@ class SubspaceBaseTrainer(BaseTrainer):
                          n_epochs=config.trainer.n_epochs,
                          val_every=config.trainer.val_every,
                          save_every=config.trainer.save_every,
-                         early_stopping_patience=config.trainer.early_stopping_patience, 
-                         num_workers=config.trainer.num_workers)
+                         early_stopping_patience=config.trainer.early_stopping_patience,
+                         num_workers=config.trainer.num_workers,
+                         save_every_best_model=config.trainer.get('save_every_best_model', False))
         #
         self._subspace_regularizer: SubspaceRegularizer = None
         self._log_train_step_every = self.config.trainer.get('log_train_step_every', 1)
-        self._log_additional_train_step_every_multiplier = self.config.trainer.get('log_additional_train_step_every_multiplier', 1)
+        self._log_additional_train_step_every_multiplier = self.config.trainer.get(
+            'log_additional_train_step_every_multiplier', 1)
         self._log_additional_logs = self.config.trainer.get('log_additional_logs', False)
-        
+
     def _setup(self):
         LOGGER.info('Starting wandb.')
         exp_data = self.config.experiment_data
@@ -94,7 +96,7 @@ class SubspaceBaseTrainer(BaseTrainer):
             regularizer_cls = get_regularizer_class(subspace_reg_cfg.type)
             regularizer_kwargs = subspace_reg_cfg.regularizer_kwargs
             subspace_reg = regularizer_cls(init_model=model, device=self.device, **regularizer_kwargs)
-            
+
             LOGGER.info(f'Subspace regularization of init_type {subspace_reg_cfg.init_type}.')
             if subspace_reg_cfg.init_type == 'random':
                 subspace_reg.init_subspace_vecs(random_buffer=True)
@@ -104,7 +106,7 @@ class SubspaceBaseTrainer(BaseTrainer):
                     raise ValueError(f'Subspace init_type is `weightsdiff`, but no buffer path is given!')
                 subspace_reg.init_subspace_vecs(path_to_buffer_or_runs=dir_buffer_path)
             elif subspace_reg_cfg.init_type == 'buffer':
-                pass # does nothing, buffer is filled during training
+                pass  # does nothing, buffer is filled during training
         else:
             raise ValueError(f'Unknown regularizer type: {subspace_reg_cfg.init_type}')
         return subspace_reg
@@ -118,17 +120,19 @@ class SubspaceBaseTrainer(BaseTrainer):
 
     def _finish_train_epoch(self,
                             epoch: int,
-                            losses_epoch: Union[Dict[str, Union[List[torch.Tensor], torch.Tensor]], List[Dict[str, torch.Tensor]]] = {},
+                            losses_epoch: Union[Dict[str, Union[List[torch.Tensor], torch.Tensor]],
+                                                List[Dict[str, torch.Tensor]]] = {},
                             metrics_epoch: Dict[str, Union[float, torch.Tensor]] = {}) -> None:
-        metrics_epoch.update({'time_last_train_epoch_in_s': self._time_last_train_epoch})        
+        metrics_epoch.update({'time_last_train_epoch_in_s': self._time_last_train_epoch})
         self._log_losses_metrics('train', epoch, losses_epoch, metrics_epoch)
         self._reset_metrics()
 
     def _finish_val_epoch(self,
                           epoch: int,
-                          losses_epoch: Union[Dict[str, Union[List[torch.Tensor], torch.Tensor]], List[Dict[str, torch.Tensor]]] = {},
+                          losses_epoch: Union[Dict[str, Union[List[torch.Tensor], torch.Tensor]],
+                                              List[Dict[str, torch.Tensor]]] = {},
                           metrics_epoch: Dict[str, Union[float, torch.Tensor]] = {}) -> float:
-        metrics_epoch.update({'time_last_val_epoch_in_s': self._time_last_val_epoch})        
+        metrics_epoch.update({'time_last_val_epoch_in_s': self._time_last_val_epoch})
         self._log_losses_metrics('val', epoch, losses_epoch, metrics_epoch)
 
         # val_score is first metric in self._val_metrics
@@ -139,7 +143,8 @@ class SubspaceBaseTrainer(BaseTrainer):
     def _log_losses_metrics(self,
                             prefix: str,
                             epoch: int,
-                            losses_epoch: Union[Dict[str, Union[List[torch.Tensor], torch.Tensor]], List[Dict[str, torch.Tensor]]] = {},
+                            losses_epoch: Union[Dict[str, Union[List[torch.Tensor], torch.Tensor]],
+                                                List[Dict[str, torch.Tensor]]] = {},
                             metrics_epoch: Dict[str, Any] = {},
                             log_to_console: bool = True) -> None:
         if isinstance(losses_epoch, list):

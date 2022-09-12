@@ -69,15 +69,14 @@ config:
 
   trainer:
     training_setup: supervised
-    n_epochs: 50
+    n_epochs: 1000
     log_train_step_every: 1
-    # log_additional_train_step_every_multiplier: 1
+    log_additional_train_step_every_multiplier: 1
     log_additional_logs: True
-    val_every: 1
-    # val_mode: reg # noreg # use regularization terms
-    save_every: 50
-    early_stopping_patience: 15 # no early stopping
-    batch_size: 16
+    val_every: 5
+    save_every: 10000
+    early_stopping_patience: 100
+    batch_size: 32
     optimizer_scheduler:
       optimizer_name: adamw #sgd #adamw
       optimizer_kwargs:
@@ -102,6 +101,7 @@ config:
       - MeanSquaredError
     num_workers: 4
     verbose: False #True
+    plot_predictions_every_val_multiplier: 10
 
   data:
     supervised_metadataset_wrapper_kwargs:
