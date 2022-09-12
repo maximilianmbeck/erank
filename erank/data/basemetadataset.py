@@ -5,7 +5,7 @@ import copy
 import numpy as np
 from abc import ABC, abstractmethod
 from typing import Dict, List, Tuple, Union
-from torch.utils.data import IterableDataset, get_worker_info
+from torch.utils.data import TensorDataset, IterableDataset, get_worker_info
 from matplotlib.figure import Figure
 from ml_utilities.data_utils import Scaler, DummyScaler, get_scaler
 
@@ -116,6 +116,11 @@ class Task(ABC):
     def __lt__(self, other) -> bool:
         return self.name < other.name
 
+    def get_support_dataset(self) -> TensorDataset:
+        return TensorDataset(*self.support_set)
+
+    def get_query_dataset(self) -> TensorDataset:
+        return TensorDataset(*self.query_set)
 
 class BaseMetaDataset(ABC, IterableDataset):
     """

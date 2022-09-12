@@ -128,7 +128,7 @@ class ReptileTrainer(SubspaceBaseTrainer):
 
             # eval on query set with inner-loop optimized model
             log_losses_inner_eval = {}
-            if self._log_train_epoch_every > 0 and epoch % self._log_train_epoch_every == 0:
+            if self._log_train_step_every > 0 and epoch % self._log_train_step_every == 0:
                 query_set = support_query_as_minibatch(query_set, self.device)
                 log_losses_inner_eval, query_preds = self._inner_loop_eval(inner_model, query_set)
                 LOGGER.debug(
@@ -157,9 +157,9 @@ class ReptileTrainer(SubspaceBaseTrainer):
             losses_inner_eval[task.name] = log_losses_inner_eval
 
         # log epoch stats
-        if self._log_train_epoch_every > 0 and epoch % self._log_train_epoch_every == 0:
+        if self._log_train_step_every > 0 and epoch % self._log_train_step_every == 0:
             epoch_stats['meta-grad-norm'] = compute_grad_norm(self._model)
-            if self._log_additional_logs and epoch % (self._log_additional_train_epoch_every_multiplier * self._log_train_epoch_every) == 0:
+            if self._log_additional_logs and epoch % (self._log_additional_train_step_every_multiplier * self._log_train_step_every) == 0:
                 if self._subspace_regularizer:
                     additional_logs = self._subspace_regularizer.get_additional_logs()
                     epoch_stats.update(additional_logs)
@@ -175,7 +175,7 @@ class ReptileTrainer(SubspaceBaseTrainer):
             self._subspace_regularizer.set_base_model(self._model)
 
         # log epoch
-        if self._log_train_epoch_every > 0 and epoch % self._log_train_epoch_every == 0:
+        if self._log_train_step_every > 0 and epoch % self._log_train_step_every == 0:
             self.__log_train_epoch(epoch, losses_inner_learning, losses_inner_eval, epoch_stats)
 
     def _inner_loop_learning(
@@ -361,7 +361,8 @@ class ReptileTrainer(SubspaceBaseTrainer):
                             **losses_inner_eval,
                             **losses_inner_learning,
                             **epoch_stats)
-        self._finish_train_epoch(epoch, losses_epoch)
+        if self._log_train_step_every > 0 and epoch % self._log_train_step_every == 0:
+            self._finish_train_epoch(epoch, losses_epoch)
 
     def __process_log_inner_learning(self,
                                      log_dicts_losses_inner_learning: Dict[str, List[Dict[str, torch.Tensor]]],

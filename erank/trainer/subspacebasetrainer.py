@@ -6,7 +6,7 @@ import pandas as pd
 from torch import nn
 from omegaconf import DictConfig, OmegaConf
 from pathlib import Path
-from ml_utilities.utils import convert_dict_to_python_types
+from ml_utilities.utils import convert_dict_to_python_types, convert_listofdicts_to_dictoflists
 from ml_utilities.torch_models import get_model_class
 from ml_utilities.torch_utils import get_loss
 from ml_utilities.trainers.basetrainer import BaseTrainer
@@ -42,8 +42,8 @@ class SubspaceBaseTrainer(BaseTrainer):
                          num_workers=config.trainer.num_workers)
         #
         self._subspace_regularizer: SubspaceRegularizer = None
-        self._log_train_epoch_every = self.config.trainer.get('log_train_epoch_every', 1)
-        self._log_additional_train_epoch_every_multiplier = self.config.trainer.get('log_additional_train_epoch_every_multiplier', 1)
+        self._log_train_step_every = self.config.trainer.get('log_train_step_every', 1)
+        self._log_additional_train_step_every_multiplier = self.config.trainer.get('log_additional_train_step_every_multiplier', 1)
         self._log_additional_logs = self.config.trainer.get('log_additional_logs', False)
         
     def _setup(self):
@@ -118,18 +118,17 @@ class SubspaceBaseTrainer(BaseTrainer):
 
     def _finish_train_epoch(self,
                             epoch: int,
-                            losses_epoch: Dict[str, Union[List[float], float]] = {},
+                            losses_epoch: Union[Dict[str, Union[List[torch.Tensor], torch.Tensor]], List[Dict[str, torch.Tensor]]] = {},
                             metrics_epoch: Dict[str, Union[float, torch.Tensor]] = {}) -> None:
-        if self._log_train_epoch_every > 0 and epoch % self._log_train_epoch_every == 0:
-            losses_epoch.update({'time_last_train_epoch_in_s': self._time_last_train_epoch})        
-            self._log_losses_metrics('train', epoch, losses_epoch, metrics_epoch)
-            self._reset_metrics()
+        metrics_epoch.update({'time_last_train_epoch_in_s': self._time_last_train_epoch})        
+        self._log_losses_metrics('train', epoch, losses_epoch, metrics_epoch)
+        self._reset_metrics()
 
     def _finish_val_epoch(self,
                           epoch: int,
-                          losses_epoch: Dict[str, Union[List[float], float]] = {},
+                          losses_epoch: Union[Dict[str, Union[List[torch.Tensor], torch.Tensor]], List[Dict[str, torch.Tensor]]] = {},
                           metrics_epoch: Dict[str, Union[float, torch.Tensor]] = {}) -> float:
-        losses_epoch.update({'time_last_val_epoch_in_s': self._time_last_val_epoch})        
+        metrics_epoch.update({'time_last_val_epoch_in_s': self._time_last_val_epoch})        
         self._log_losses_metrics('val', epoch, losses_epoch, metrics_epoch)
 
         # val_score is first metric in self._val_metrics
@@ -140,9 +139,11 @@ class SubspaceBaseTrainer(BaseTrainer):
     def _log_losses_metrics(self,
                             prefix: str,
                             epoch: int,
-                            losses_epoch: Dict[str, Union[List[float], float]] = {},
+                            losses_epoch: Union[Dict[str, Union[List[torch.Tensor], torch.Tensor]], List[Dict[str, torch.Tensor]]] = {},
                             metrics_epoch: Dict[str, Any] = {},
                             log_to_console: bool = True) -> None:
+        if isinstance(losses_epoch, list):
+            losses_epoch = convert_listofdicts_to_dictoflists(losses_epoch)
         for loss_name, loss_vals in losses_epoch.items():
             if isinstance(loss_vals, list):
                 losses_epoch[loss_name] = torch.tensor(loss_vals).mean().item()
