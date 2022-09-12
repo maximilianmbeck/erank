@@ -135,7 +135,7 @@ class OmniglotDataset(BaseMetaClassificationDataset):
         self._alphabets: Dict[str, List[str]] = None
         self._data = self._load_data(
             self.split)  # TODO: do this with https://stackoverflow.com/questions/100003/what-are-metaclasses-in-python
-        # pre-generate some tasks which are accessed via get task to ensure deterministic behavior
+        # pre-generate some tasks which are accessed via get_task() to ensure deterministic behavior
         self.pregen_tasks, self.pregen_task_name_to_index = self.create_pregen_tasks()
 
     def _load_data(self, split: str) -> Dict[str, np.ndarray]:
@@ -184,7 +184,7 @@ class OmniglotDataset(BaseMetaClassificationDataset):
         images_for_character = []
         for character_image_file in character_folder.iterdir():
             img = Image.open(character_image_file).resize(OmniglotDataset.output_img_size)
-            img = np.asarray(img, dtype=np.int8)
+            img = np.asarray(img, dtype=np.uint8)
             # add channel dimension
             img = np.expand_dims(img, axis=0)
             images_for_character.append(img)
