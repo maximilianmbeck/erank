@@ -122,6 +122,7 @@ class Task(ABC):
     def get_query_dataset(self) -> TensorDataset:
         return TensorDataset(*self.query_set)
 
+
 class BaseMetaDataset(ABC, IterableDataset):
     """
     Baseclass for a Metadataset.
@@ -179,7 +180,8 @@ class BaseMetaDataset(ABC, IterableDataset):
         """
         if num_tasks == -1:
             num_tasks = len(self.pregen_tasks)
-        return self.pregen_tasks[start_index:num_tasks].tolist()
+        end_index = start_index + num_tasks
+        return self.pregen_tasks[start_index:end_index].tolist()
 
     def create_pregen_tasks(self) -> Tuple[np.ndarray, Dict[str, int]]:
         """Generate `pregen_tasks`. Default behavior samples tasks randomly via `sample_tasks()`.

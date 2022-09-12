@@ -6,8 +6,8 @@ import torch.utils.data as data
 from tqdm import tqdm
 from torch import nn
 from omegaconf import DictConfig
+import matplotlib.pyplot as plt
 from erank.data.basemetadataset import support_query_as_minibatch
-
 from erank.data.supervised_metadataset_wrapper import SupervisedMetaDatasetWrapper
 from erank.trainer.subspacebasetrainer import SubspaceBaseTrainer
 from erank.data import get_dataset_provider
@@ -152,3 +152,4 @@ class SupervisedTrainer(SubspaceBaseTrainer):
             save_path = self._experiment_dir / SAVEDIR_PRED_PLOT
             save_path.mkdir(parents=True, exist_ok=True)
             fig.savefig(save_path / fname, bbox_inches='tight', dpi=DPI)
+            plt.close(fig)
