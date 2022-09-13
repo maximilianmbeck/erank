@@ -298,7 +298,7 @@ class SubspaceRegularizer(Regularizer):
         return log_dict
 
     @staticmethod
-    def erank(matrix_A: torch.Tensor, center_matrix_A: bool = False) -> torch.Tensor:
+    def erank(matrix_A: torch.Tensor) -> torch.Tensor:
         """Calculates the effective rank of a matrix.
 
         Args:
