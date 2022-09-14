@@ -8,9 +8,20 @@ from erank.regularization.base_regularizer import Regularizer
 LOGGER = logging.getLogger(__name__)
 
 LOG_LOSS_PREFIX = 'loss'
+LOG_LOSS_GRAD_NORM_SUFFIX = 'grad_norm'
 LOG_LOSS_TOTAL_KEY = f'{LOG_LOSS_PREFIX}_total'
 
 class RegularizedLoss(nn.Module):
+    """Loss wrapper to add additional regularization terms to the loss. 
+    Each regularization term is implemented as Subclass of the `Regularizer` module.
+
+    If a regularization term requires its gradient to be normalized, it will already compute 
+    the respective gradients via .backward(retain_graph=True) and normalize + scale the respective
+    gradient.
+
+    Args:
+        loss (nn.Module): Original loss
+    """
 
     def __init__(self, loss: nn.Module):
         super().__init__()
@@ -33,6 +44,10 @@ class RegularizedLoss(nn.Module):
             for reg_name, reg in self._regularizers.items():
                 loss_reg = reg(model)
                 loss_dict[f'{LOG_LOSS_PREFIX}_{reg_name}'] = loss_reg
+                # TODO do backward pass on loss_reg if neccessary (retain_graph=True)
+                # compute grad norm -> add to loss_dict
+                # 
+                # Scale gradient to norm
                 loss_total += reg.loss_coefficient * loss_reg
                 if torch.isinf(loss_reg) or torch.isnan(loss_reg):
                     LOGGER.warning(

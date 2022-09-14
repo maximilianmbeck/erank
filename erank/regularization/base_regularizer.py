@@ -5,6 +5,7 @@ from torch import nn
 
 LOGGER = logging.getLogger(__name__)
 
+
 class Regularizer(nn.Module, ABC):
     """A class defining the interface for a regularizer.
 
@@ -23,13 +24,23 @@ class Regularizer(nn.Module, ABC):
 
     @abstractmethod
     def forward(self, model: nn.Module) -> torch.Tensor:
+        """Compute regularization here."""
+        pass
+
+    @property
+    @abstractmethod
+    def normalize_partial_gradient(self) -> bool:
+        """Flag, determining wether to normalize the gradient of this term 
+        before accumulating the gradient of the total loss."""
         pass
 
     @property
     def name(self) -> str:
+        """Name of the regularizer. Used for logging."""
         return self._name
 
     @property
     def loss_coefficient(self) -> torch.Tensor:
+        """Coefficient for the regularization term in the total loss. 
+        If `normalize_partial_gradient` is true, this coefficient is used to scale the gradient."""
         return self._loss_coefficient.data
-

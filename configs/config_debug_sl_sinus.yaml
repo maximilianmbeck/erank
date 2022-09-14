@@ -88,11 +88,11 @@ config:
 
     loss: mse
     regularizer:
-      type: none #XXX #dotproduct # erank # none
+      type: erank # none #XXX #dotproduct # erank # none
       init_type: buffer #weightsdiff #random #buffer
       init_dir_buffer: null
       regularizer_kwargs:
-        loss_coefficient: XXX
+        loss_coefficient: 0.5 #XXX
         buffer_size: 10 # ${config.trainer.task_batch_size} # number of directions stored in the buffer
         buffer_mode: none #backlog # none, backlog, queue
         optim_model_vec_mode: basediff # abs, stepdiff, basediff # TODO make sure to be init_diff
