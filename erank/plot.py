@@ -97,6 +97,8 @@ def plot_models_erank(erank_df: pd.DataFrame,
                       column_name_to_plot_kwargs: Dict[str, str] = {},
                       ax_title: str = None,
                       fig_title: str = None,
+                      legend_columns: int = 1,
+                      columnspacing: float = None,
                       alpha=0.8,
                       fig_ax: Tuple[mpl.figure.Figure, mpl.axis.Axis] = None):
    
@@ -120,5 +122,5 @@ def plot_models_erank(erank_df: pd.DataFrame,
     ax.grid(True, alpha=0.4)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    ax.legend(frameon=False, loc='lower center', bbox_to_anchor=(0.5, 1), ncol=2, mode='expand')
+    ax.legend(frameon=False, loc='lower center', bbox_to_anchor=(0.5, 1), ncol=legend_columns, mode=None, columnspacing=columnspacing, labelspacing=None)
     return fig, ax
