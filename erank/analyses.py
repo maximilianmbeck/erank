@@ -15,7 +15,7 @@ def create_model_erank_df(models: Union[torch.Tensor, Dict[str, torch.Tensor]],
                           random_init_model: BaseModel = None,
                           erank_fn: Callable[[torch.Tensor], torch.Tensor] = SubspaceRegularizer.erank,
                           seed: int = 0,
-                          device: Union[torch.device, str, int] = "auto") -> pd.DataFrame:
+                          device: Union[torch.device, str, int] = "auto") -> pd.DataFrame: # columns: different model_sequences, rows: erank with number of models
     GAUSS_RAND_KEY = 'Gaussian random'
     RAND_MODEL_INIT_KEY = 'Random model initializations'
     TRAINED_MODELS_KEY = 'Trained models'
@@ -75,4 +75,6 @@ def create_model_erank_df(models: Union[torch.Tensor, Dict[str, torch.Tensor]],
         for descr, model_matrix in models.items():
             erank_data[descr].append(_erank(model_matrix[model_idxes[:i]]))
     
-    return erank_data
+    df_index = pd.Index(num_vec_idxes, dtype=int, name='Number of Vectors')
+
+    return pd.DataFrame(erank_data, index=df_index)
