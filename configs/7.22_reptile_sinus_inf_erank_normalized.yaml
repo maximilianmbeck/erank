@@ -7,8 +7,8 @@ hydra:
 #######
 run_config:
   exec_type: parallel # sequential
-  hostname: gorilla #fox
-  gpu_ids: [4, 5, 7] #[0, 1]
+  hostname: cheetah #fox
+  gpu_ids: [2, 3] #[0, 1]
   runs_per_gpu: 3
 
   wandb: # wandb config for run_handler, if "wandb: null" then logging to wandb is disabled for run_handler
@@ -37,7 +37,7 @@ sweep:
     - parameter: trainer.inner_optimizer.optimizer_kwargs.lr
       vals: [0.01, 0.005, 0.001] #[0.01] # [0.1, 0.01, 0.001]
 
-start_num: 1 # use this to count how often this config is run
+start_num: 0 # use this to count how often this config is run
 
 ###
 config:
