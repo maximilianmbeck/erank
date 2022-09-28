@@ -5,6 +5,7 @@
 #SBATCH --gres=gpu:3 --constraint='T4'
 #SBATCH --mail-type=FAIL
 #SBATCH --mail-user=beck@ml.jku.at
+#SBATCH --qos gpujobs
 
 
 # use other gpu: --gres=gpu:a100-pcie-40gb:2
@@ -20,4 +21,4 @@ which python
 NUM_CORES=32
 export MKL_NUM_THREADS=$NUM_CORES OMP_NUM_THREADS=$NUM_CORES
 
-python tsfewshot/run_scheduler.py finetune --directory /system/user/beck/pwbeck/meta/tsfewshot/runs/pretrain/miniimagenet_s/ms-s-sv-adam-seed1-convnet-48cls_211104_164253/finetune_pca_epoch_lr0.001/configs1/ --gpu-ids 0 1 2 --runs-per-gpu 6
+python run_sweep.py --config-name 7.22_reptile_sinus_inf_erank_normalized.yaml
