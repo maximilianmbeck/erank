@@ -24,6 +24,7 @@ class DotProductRegularizer(SubspaceRegularizer):
             track_last_n_model_steps: int = 2,
             normalize_dir_matrix_m: bool = False,
             loss_coefficient_learnable: bool = False,
+            normalize_partial_gradient: bool = False, 
             epsilon_origin_std: float = EPSILON_ORIGIN_STD,
             min_mean_vec_norm: float = MIN_MEAN_VEC_NORM):
         super().__init__(name=DotProductRegularizer.name,
@@ -36,7 +37,8 @@ class DotProductRegularizer(SubspaceRegularizer):
                          subspace_vecs_mode=subspace_vecs_mode,
                          track_last_n_model_steps=track_last_n_model_steps,
                          normalize_dir_matrix_m=normalize_dir_matrix_m,
-                         loss_coefficient_learnable=loss_coefficient_learnable)
+                         loss_coefficient_learnable=loss_coefficient_learnable, 
+                         normalize_partial_gradient=normalize_partial_gradient)
 
         self._epsilon_origin_std = epsilon_origin_std
         self._min_mean_vec_norm = min_mean_vec_norm

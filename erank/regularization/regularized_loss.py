@@ -2,7 +2,7 @@ import torch
 import logging
 from typing import Dict, Tuple
 from torch import nn
-
+from ml_utilities.torch_utils import scale_grad_norm_to_
 from erank.regularization.base_regularizer import Regularizer
 
 LOGGER = logging.getLogger(__name__)
@@ -10,6 +10,7 @@ LOGGER = logging.getLogger(__name__)
 LOG_LOSS_PREFIX = 'loss'
 LOG_LOSS_GRAD_NORM_SUFFIX = 'grad_norm'
 LOG_LOSS_TOTAL_KEY = f'{LOG_LOSS_PREFIX}_total'
+
 
 class RegularizedLoss(nn.Module):
     """Loss wrapper to add additional regularization terms to the loss. 
@@ -44,11 +45,23 @@ class RegularizedLoss(nn.Module):
             for reg_name, reg in self._regularizers.items():
                 loss_reg = reg(model)
                 loss_dict[f'{LOG_LOSS_PREFIX}_{reg_name}'] = loss_reg
-                # TODO do backward pass on loss_reg if neccessary (retain_graph=True)
-                # compute grad norm -> add to loss_dict
-                # 
-                # Scale gradient to norm
-                loss_total += reg.loss_coefficient * loss_reg
+
+                # when the partial gradient should be normalized, we need to do two backward passes
+                # the first is only on the regularization term, the second is in the main training loop on the total loss
+                if reg.normalize_partial_gradient:
+                    # We can only have one regularizer that normalizes its partial gradient
+                    # otherwise we would normalize the gradients of two regularizers to one
+                    grad_ = next(model.parameters()).grad
+                    assert grad_ == None or torch.linalg.norm(grad_) == 0.0, 'There are more than one regularizers, that require normalizing their gradients.'
+
+                    # do backward pass only on regularization term
+                    loss_reg.backward(retain_graph=True)
+                    # rescale gradient
+                    loss_dict[f'{LOG_LOSS_GRAD_NORM_SUFFIX}_{reg_name}'] = scale_grad_norm_to_(model.parameters(),
+                                                                                             norm=reg.loss_coefficient)
+                else:
+                    # regularization term is added to total loss
+                    loss_total += reg.loss_coefficient * loss_reg
                 if torch.isinf(loss_reg) or torch.isnan(loss_reg):
                     LOGGER.warning(
                         f'{LOG_LOSS_PREFIX}_{reg_name} is Inf or NaN! Inf: {torch.isinf(loss_reg)} | NaN: {torch.isnan(loss_reg)}'

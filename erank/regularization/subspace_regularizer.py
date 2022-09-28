@@ -71,10 +71,12 @@ class SubspaceRegularizer(Regularizer):
             subspace_vecs_mode: str,  # abs, initdiff, basediff
             track_last_n_model_steps: int = 2,
             normalize_dir_matrix_m: bool = False,
-            loss_coefficient_learnable: bool = False):
+            loss_coefficient_learnable: bool = False,
+            normalize_partial_gradient: bool = False):
         super().__init__(name=name,
                          loss_coefficient=loss_coefficient,
-                         loss_coefficient_learnable=loss_coefficient_learnable)
+                         loss_coefficient_learnable=loss_coefficient_learnable, 
+                         normalize_partial_gradient=normalize_partial_gradient)
         self.buffer_size = buffer_size  # number of subspace vectors / directions in the buffer
         self.buffer_mode = buffer_mode
         self.optim_model_vec_mode = optim_model_vec_mode

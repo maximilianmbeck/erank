@@ -235,6 +235,7 @@ class ReptileTrainer(SubspaceBaseTrainer):
             LOGGER.debug(f'------Inner iter: {i}')
             xs, ys = support_set
             # forward pass
+            inner_optimizer.zero_grad()
             ys_pred = inner_model(xs)
             if mode == 'train':
                 loss, loss_dict = self._loss(ys_pred, ys, inner_model)  # use regularization
@@ -254,7 +255,6 @@ class ReptileTrainer(SubspaceBaseTrainer):
             loss_dict['weight_norm'] = compute_weight_norm(inner_model)
 
             # backward pass
-            inner_optimizer.zero_grad()
             loss.backward()
             inner_optimizer.step()
 

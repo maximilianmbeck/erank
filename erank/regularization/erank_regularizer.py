@@ -40,6 +40,7 @@ class EffectiveRankRegularizer(SubspaceRegularizer):
             track_last_n_model_steps: int = 2,
             normalize_dir_matrix_m: bool = False,
             loss_coefficient_learnable: bool = False,
+            normalize_partial_gradient: bool = False,
             epsilon_origin_std: float = EPSILON_ORIGIN,
             min_optim_vec_norm: float = MIN_OPTIM_VEC_NORM):
         super().__init__(name=EffectiveRankRegularizer.name,
@@ -52,7 +53,8 @@ class EffectiveRankRegularizer(SubspaceRegularizer):
                          subspace_vecs_mode=subspace_vecs_mode,
                          track_last_n_model_steps=track_last_n_model_steps,
                          normalize_dir_matrix_m=normalize_dir_matrix_m,
-                         loss_coefficient_learnable=loss_coefficient_learnable)
+                         loss_coefficient_learnable=loss_coefficient_learnable,
+                         normalize_partial_gradient=normalize_partial_gradient)
 
         self._epsilon_origin_std = epsilon_origin_std
         self._min_optim_vec_norm = min_optim_vec_norm
@@ -97,10 +99,10 @@ class EffectiveRankRegularizer(SubspaceRegularizer):
         """
         if self.buffer_mode == 'backlog':
             if self._subspace_vecs.shape[0] < self.buffer_size:
-                return torch.tensor(0.0, dtype=torch.float32, device=self._device)
+                return torch.tensor(0.0, dtype=torch.float32, device=self._device, requires_grad=True)
         elif self.buffer_mode == 'queue':
             if len(self.subspace_vec_buffer) < self.buffer_size:
-                return torch.tensor(0.0, dtype=torch.float32, device=self._device)
+                return torch.tensor(0.0, dtype=torch.float32, device=self._device, requires_grad=True)
 
         self._update_model_params_queue(model)
         directions_matrix = self._construct_directions_matrix_m(model, self.optim_model_vec_mode,

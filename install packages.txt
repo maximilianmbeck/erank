@@ -2,5 +2,5 @@ Subspaces env - Installation list
 
 conda install pytorch torchvision torchaudio cudatoolkit=11.6 -c pytorch -c conda-forge
 
-numpy matplotlib pandas hydra-core wandb tqdm plotly ipykernel ipywidgets
+numpy matplotlib pandas hydra-core wandb tqdm plotly ipykernel ipywidgets scipy seaborn
 
