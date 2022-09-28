@@ -2,7 +2,7 @@ import torch
 import logging
 from typing import Dict, Tuple
 from torch import nn
-from ml_utilities.torch_utils import scale_grad_norm_to_
+from ml_utilities.torch_utils import scale_grad_norm_to_, compute_grad_norm_
 from erank.regularization.base_regularizer import Regularizer
 
 LOGGER = logging.getLogger(__name__)
@@ -59,6 +59,8 @@ class RegularizedLoss(nn.Module):
                     # rescale gradient
                     loss_dict[f'{LOG_LOSS_GRAD_NORM_SUFFIX}_{reg_name}'] = scale_grad_norm_to_(model.parameters(),
                                                                                              norm=reg.loss_coefficient)
+                    LOGGER.debug(f'Reg grad norm before scaling: {loss_dict[f"{LOG_LOSS_GRAD_NORM_SUFFIX}_{reg_name}"]}')
+                    LOGGER.debug(f'Reg grad norm after scaling: {compute_grad_norm_(model)}')
                 else:
                     # regularization term is added to total loss
                     loss_total += reg.loss_coefficient * loss_reg
