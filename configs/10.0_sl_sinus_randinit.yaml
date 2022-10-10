@@ -96,14 +96,14 @@ config:
 
     loss: mse
     regularizer:
-      type: none #XXX #dotproduct # erank # none
+      type: none #XX #dotproduct # erank # none
       init_type: buffer #weightsdiff #random #buffer
       init_dir_buffer: null
       regularizer_kwargs:
         loss_coefficient: XXX
         buffer_size: 10 # ${config.trainer.task_batch_size} # number of directions stored in the buffer
         buffer_mode: none #backlog # none, backlog, queue
-        optim_model_vec_mode: basediff # abs, stepdiff, basediff # TODO make sure to be init_diff
+        optim_model_vec_mode: basediff # abs, stepdiff, basediff ## base_diff acts in supervised setting as init_diff
         subspace_vecs_mode: basediff # abs, initdiff, basediff
         track_last_n_model_steps: 0
         normalize_dir_matrix_m: False

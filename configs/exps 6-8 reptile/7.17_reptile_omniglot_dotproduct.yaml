@@ -1,0 +1,176 @@
+defaults:
+  - hydra: jobname_outputdir_format
+  - _self_
+#######
+hydra:
+  verbose: ${config.trainer.verbose}
+#######
+run_config:
+  exec_type: parallel # sequential
+  hostname: spider
+  gpu_ids: [0, 1, 2, 3]
+  runs_per_gpu: 4
+
+  wandb: # wandb config for run_handler, if "wandb: null" then logging to wandb is disabled for run_handler
+    init:
+      tags:
+        - ${config.experiment_data.experiment_tag}_exps
+        - run_handler
+      notes: #
+      group: ${config.experiment_data.experiment_tag}
+      job_type: run_handler
+
+seeds:
+  - 0
+
+sweep:
+  type: grid
+  axes:
+    - parameter: trainer.task_batch_size
+      vals: [5, 10] #[1, 5, 10]
+    - parameter: trainer.n_inner_iter
+      vals: [10, 30] #[10, 30, 100]
+    - parameter: trainer.regularizer.regularizer_kwargs.loss_coefficient
+      vals: [0.0, 0.1, 0.5, 1.0, 1.5, 3.0] # [0.0, 0.001, 0.01, 0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 10.]
+    - parameter: trainer.regularizer.type
+      vals: ["dotproduct"] #["erank", "dotproduct"]
+
+start_num: 0 # use this to count how often this config is run
+
+###
+config:
+  experiment_data:
+    entity: jkuiml-fsl # null
+    project_name: erank_meta
+    experiment_tag: "7.17"
+    experiment_name: og-${config.experiment_data.experiment_tag}.${start_num}-${config.trainer.regularizer.type}_inf_tasks-loss_coeff-${config.trainer.regularizer.regularizer_kwargs.loss_coefficient}-inner_iter-${config.trainer.n_inner_iter}-task_bs-${config.trainer.task_batch_size} 
+    experiment_dir: null
+    seed: 0
+    hostname: null # the server on which the run is run, will be filled by run_handler
+    gpu_id: 0
+
+  wandb:
+    init:
+      tags: # list(), used to tag wandblogger
+        - ${config.experiment_data.experiment_tag}_exps
+        - erank
+      notes: Hyperparametersearch for own Reptile implementation # str, used to make notes to wandblogger
+      group: ${config.experiment_data.experiment_tag} # null
+      job_type: startnum_${start_num} # examples: hypsearch, pretrain, eval, etc.
+
+    watch:
+      log: null #parameters #null #all
+      log_freq: 5000
+
+  model:
+    name: cnn2d
+    out_channels: 64
+    model_kwargs:
+      image_size: 28
+      in_channels: 1
+      act_fn: relu
+      layer_configs:
+        - out_channels: ${config.model.out_channels}
+          kernel_size: 3
+          batch_norm: true
+          stride: 1
+          padding: 0
+          max_pool_kernel_size: 2
+        - out_channels: ${config.model.out_channels}
+          kernel_size: 3
+          batch_norm: true
+          stride: 1
+          padding: 0
+          max_pool_kernel_size: 2
+        - out_channels: ${config.model.out_channels}
+          kernel_size: 3
+          batch_norm: true
+          stride: 1
+          padding: 0
+          # max_pool_kernel_size: {mp_kernel_size}
+        - out_channels: ${config.model.out_channels}
+          kernel_size: 3
+          batch_norm: true
+          stride: 1
+          padding: 0
+          # max_pool_kernel_size: {mp_kernel_size}
+      linear_output_units:
+        - ${config.data.n_way_classification}
+
+  trainer:
+    training_setup: reptile
+    n_epochs: 50e3 #100e3 # our sine: 1e6 # number of iterations (outer/meta gradient steps)
+    log_train_epoch_every: 10
+    log_additional_train_epoch_every_multiplier: 10
+    log_additional_logs: False
+    val_every: 100
+    val_mode: reg # noreg # use regularization terms
+    val_tasks_cfg: # [random / deterministic, num_tasks] #random: sample tasks randomly, on every iteration, # deterministic: use pregenerated tasks # num_tasks=-1 use all available
+      selection_type: random
+      num_tasks: 10
+    save_every: 100e3
+    early_stopping_patience: 10e3 # no early stopping
+    task_batch_size: XXX # our sine: 10 # meta-batch size (number of tasks sampled per iteration)
+    optimizer_scheduler:
+      optimizer_name: sgd
+      optimizer_kwargs:
+        lr: 1.0 # our sine: 0.1 # default sine: 0.001
+        weight_decay: 0.0 #0.001
+    init_model: null
+    inner_optimizer:
+      optimizer_name: sgd
+      optimizer_kwargs:
+        lr: 0.01 # our sine: 0.001 # default sine: 0.01
+    n_inner_iter: XXX # 10 #100 #3
+    # val_pred_plots_for_tasks: 0 #1 # Prediction plots for `val_plots` tasks. If int: Uses the first `val_plots` tasks to generate plots
+    inner_eval_after_steps: 0 #[0, 1, 2, 3, 5, 10, 20, 30, 50] # null: use default, List[int]: list of steps after, which eval is done
+    # log_plot_inner_learning_curves:
+    #   - loss_key: loss_total
+    #     # ylimits: [0, 1.8]
+    #   - loss_key: loss_CrossEntropyLoss
+    #     # ylimits: [0, 1.8]
+    #   - loss_key: loss_${config.trainer.regularizer.type}
+    #     ylimits: [-1, 1] # for dotproduct ylimits of plot [lower, upper]
+    #     # ylimits: [0, ${config.trainer.task_batch_size}] # for erank ylimits of plot [lower, upper]
+
+    loss: crossentropy
+    regularizer:
+      type: XXX #dotproduct # erank # none
+      init_type: buffer #weightsdiff #random #buffer
+      init_dir_buffer: null
+      regularizer_kwargs:
+        loss_coefficient: XXX
+        buffer_size: ${config.trainer.task_batch_size} #10 # number of directions stored in the buffer
+        buffer_mode: backlog # none, backlog, queue
+        optim_model_vec_mode: basediff # abs, stepdiff, basediff
+        subspace_vecs_mode: basediff # abs, initdiff, basediff
+        track_last_n_model_steps: 0
+        normalize_dir_matrix_m: False
+    metrics:
+      - Accuracy
+    num_workers: 0 #4
+    verbose: False #True
+
+  data:
+    metadataset: omniglot
+    n_way_classification: 5
+    train_metadataset_kwargs:
+      data_root_path: /system/user/beck/pwbeck/data
+      n_way_classification: ${config.data.n_way_classification}
+      support_size: 5
+      query_size: 10
+      dataset_layout: metadataset
+      split: train
+      # num_tasks: 1000 # we do sample tasks on the fly
+      regenerate_task_support_set: True
+      regenerate_task_query_set: True
+    val_metadataset_kwargs:
+      data_root_path: /system/user/beck/pwbeck/data
+      n_way_classification: ${config.data.n_way_classification}
+      support_size: 5
+      query_size: 10
+      dataset_layout: metadataset
+      split: test
+      # num_tasks: 1000
+      regenerate_task_support_set: True
+      regenerate_task_query_set: True
