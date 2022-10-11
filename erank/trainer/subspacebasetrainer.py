@@ -1,11 +1,11 @@
 import logging
 from typing import Any, Dict, List, Union
 import torch
-import wandb
 import pandas as pd
 from torch import nn
 from omegaconf import DictConfig, OmegaConf
 from pathlib import Path
+from ml_utilities.logger import Logger
 from ml_utilities.utils import convert_dict_to_python_types, convert_listofdicts_to_dictoflists
 from ml_utilities.torch_models import get_model_class
 from ml_utilities.torch_utils import get_loss
@@ -48,16 +48,15 @@ class SubspaceBaseTrainer(BaseTrainer):
             'log_additional_train_step_every_multiplier', 1)
         self._log_additional_logs = self.config.trainer.get('log_additional_logs', False)
 
-    def _setup(self):
-        LOGGER.info('Starting wandb.')
         exp_data = self.config.experiment_data
-        wandb.init(entity=exp_data.get('entity', None),
-                   project=exp_data.project_name,
-                   name=HydraConfig.get().job.name,
-                   dir=str(Path.cwd()),
-                   config=OmegaConf.to_container(self.config, resolve=True, throw_on_missing=True),
-                   **self.config.wandb.init,
-                   settings=wandb.Settings(start_method='fork'))
+        self._logger = Logger(job_name=exp_data.job_name,
+                              job_dir=exp_data.experiment_dir,
+                              project_name=exp_data.project_name,
+                              entity_name=exp_data.get('entity', None),
+                              config=OmegaConf.to_container(self.config, resolve=True, throw_on_missing=True),
+                              wandb_args=OmegaConf.to_container(self.config.wandb, resolve=True, throw_on_missing=True))
+        self._logger.setup_logger()
+
 
     def _create_model(self) -> None:
         LOGGER.info(f'Creating model: {self.config.model.name}')
@@ -68,7 +67,7 @@ class SubspaceBaseTrainer(BaseTrainer):
         else:
             self._model = model_class(**self.config.model.model_kwargs)
 
-        wandb.watch(self._model, **self.config.wandb.watch)
+        self._logger.watch_model(self._model)
 
     def _create_optimizer_and_scheduler(self, model: nn.Module) -> None:
         LOGGER.info('Creating optimizer and scheduler.')
@@ -147,17 +146,12 @@ class SubspaceBaseTrainer(BaseTrainer):
                                                 List[Dict[str, torch.Tensor]]] = {},
                             metrics_epoch: Dict[str, Any] = {},
                             log_to_console: bool = True) -> None:
-        if isinstance(losses_epoch, list):
-            losses_epoch = convert_listofdicts_to_dictoflists(losses_epoch)
-        for loss_name, loss_vals in losses_epoch.items():
-            if isinstance(loss_vals, list):
-                losses_epoch[loss_name] = torch.tensor(loss_vals).mean().item()
-
-        # log epoch
-        log_dict = {'epoch': epoch, 'train_step': self._train_step, **losses_epoch, **metrics_epoch}
-        wandb.log({f'{prefix}/': log_dict})
-        if log_to_console:
-            LOGGER.info(f'{prefix} epoch \n{pd.Series(convert_dict_to_python_types(log_dict), dtype=float)}')
+        self._logger.log_keys_vals(prefix=prefix,
+                                   epoch=epoch,
+                                   train_step=self._train_step,
+                                   keys_multiple_vals=losses_epoch,
+                                   keys_val=metrics_epoch,
+                                   log_to_console=log_to_console)
 
     def _final_hook(self, final_results: Dict[str, Any], *args, **kwargs):
-        wandb.run.summary.update(final_results)
+        self._logger.finish(final_results=final_results)

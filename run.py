@@ -4,6 +4,7 @@ import warnings
 import hydra
 import logging
 from omegaconf import DictConfig, OmegaConf
+from hydra.core.hydra_config import HydraConfig
 
 from erank.trainer import get_trainer_class
 LOGGER = logging.getLogger(__name__)
@@ -15,6 +16,7 @@ def run_experiment(cfg: DictConfig):
     warnings.filterwarnings('once')
     cfg = cfg.config
     cfg.experiment_data.experiment_dir = Path().cwd()
+    cfg.experiment_data.job_name = HydraConfig.get().job.name
     trainer_class = get_trainer_class(cfg.trainer.training_setup)
     trainer = trainer_class(config=cfg)
     trainer.train()
