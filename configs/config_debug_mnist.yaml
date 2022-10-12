@@ -1,0 +1,116 @@
+defaults:
+  - hydra: jobname_outputdir_format
+  - _self_
+#######
+hydra:
+  verbose: ${config.trainer.verbose}
+#######
+run_config:
+  exec_type: parallel # sequential
+  hostname: max-pc
+  gpu_ids: [0]
+  runs_per_gpu: 4
+
+  # wandb: # wandb config for run_handler, if "wandb: null" then logging to wandb is disabled for run_handler
+  #   init:
+  #     tags:
+  #       - ${config.experiment_data.experiment_tag}_exps
+  #       - run_handler
+  #     notes: #
+  #     group: ${config.experiment_data.experiment_tag}
+  #     job_type: run_handler
+
+seeds:
+  - 0
+
+sweep:
+  type: grid
+  axes:
+    - parameter: data.supervised_metadataset_wrapper_kwargs.task_idx
+      vals: arange_int(0,10,1) #[0,1,2,3,4,5,6,7,8,9]
+    - parameter: trainer.regularizer.type
+      vals: ["none"]
+
+start_num: 0 # use this to count how often this config is run
+
+###
+config:
+  experiment_data:
+    entity: jkuiml-fsl
+    project_name: erank_meta
+    experiment_tag: "DEBUG"
+    experiment_type: startnum_${start_num}
+    experiment_name: sl-sine-${config.experiment_data.experiment_tag}.${start_num}-${config.trainer.regularizer.type}-sl
+    experiment_dir: null
+    experiment_notes: Debugging for supervised sinus.
+    job_name: null
+    seed: 0
+    hostname: null # the server on which the run is run, will be filled by run_handler
+    gpu_id: 0
+
+  wandb:
+    init:
+      tags: # list(), used to tag wandblogger
+        - ${config.experiment_data.experiment_tag}_exps
+      notes: ${config.experiment_data.experiment_notes} # str, used to make notes to wandblogger
+      group: ${config.experiment_data.experiment_tag} # null
+      job_type: ${config.experiment_data.experiment_type} # examples: hypsearch, pretrain, eval, etc.
+
+    watch:
+      log: null #parameters #null #all
+      log_freq: 5000
+
+  model:
+    name: fc
+    model_kwargs:
+      input_size: 1
+      hidden_sizes:
+        - 40
+        - 40
+      output_size: 1
+      flatten_input: true # can probably use also false
+      dropout: null
+      act_fn: relu
+
+  trainer:
+    training_setup: supervised
+    n_epochs: 1
+    log_train_step_every: 1
+    log_additional_train_step_every_multiplier: 1
+    log_additional_logs: True
+    val_every: 1
+    save_every: 10000
+    early_stopping_patience: 100
+    batch_size: 256
+    optimizer_scheduler:
+      optimizer_name: adamw #sgd #adamw
+      optimizer_kwargs:
+        lr: 0.001 #1.0 # our sine: 0.1 # default sine: 0.001
+        weight_decay: 0.0 #0.001
+    init_model: null
+
+    loss: mse
+    regularizer:
+      type: none #dotproduct # erank # none
+      init_type: buffer #weightsdiff #random #buffer
+      init_dir_buffer: null
+      regularizer_kwargs:
+        loss_coefficient: 0.5
+        buffer_size: 10 # ${config.trainer.task_batch_size} # number of directions stored in the buffer
+        buffer_mode: none #backlog # none, backlog, queue
+        optim_model_vec_mode: basediff # abs, stepdiff, basediff # TODO make sure to be init_diff
+        subspace_vecs_mode: basediff # abs, initdiff, basediff
+        track_last_n_model_steps: 0
+        normalize_dir_matrix_m: False
+    metrics:
+      - MeanSquaredError
+    num_workers: 4
+    verbose: False #True
+    plot_predictions_every_val_multiplier: 10
+
+  data:
+    dataset: mnist 
+    dataset_kwargs:
+      data_root_path: /home/max/phd/data
+    dataset_split:
+      train_val_split: 0.8

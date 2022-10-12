@@ -98,27 +98,6 @@ class SinusDataset(BaseMetaDataset):
         # pre-generate some tasks which are accessed via get task to ensure deterministic behavior
         self.pregen_tasks, self.pregen_task_name_to_index = self.create_pregen_tasks()
 
-    # def _generate_tasks(self) -> Tuple[np.ndarray, Dict[str, int]]:
-    #     tasks = []
-    #     name_to_index = {}
-
-    #     self.amplitudes = self._rng.uniform(self.amplitude_range[0], self.amplitude_range[1], size=self.num_tasks)
-    #     self.phases = self._rng.uniform(self.phase_range[0], self.phase_range[1], size=self.num_tasks)
-
-    #     for i in tqdm(range(self.num_tasks), file=sys.stdout, desc='Generating Sinus tasks'):
-    #         # we need deepcopy to "deepcopy" the internal dictionaries of the tasks
-    #         task = copy.deepcopy(
-    #             SinusTask(self.support_size,
-    #                       self.query_size,
-    #                       self.amplitudes[i],
-    #                       self.phases[i],
-    #                       self.x_range,
-    #                       self._rng,
-    #                       regenerate_support_set=self.regenerate_task_support_set))
-    #         tasks.append(task)
-    #         name_to_index[task.name] = i
-    #     return np.array(tasks), name_to_index
-
     def sample_tasks(self, num_tasks: int) -> List[SinusTask]:
         if num_tasks <= 0:
             return []

@@ -2,10 +2,11 @@
 from torch.utils import data
 from typing import Any, Dict
 from erank.data import get_metadataset_class
-from erank.data.basemetadataset import BaseMetaDataset, Task
+from erank.data.basemetadataset import Task
+from erank.data.datasetgenerator import DatasetGeneratorInterface
 
 
-class SupervisedMetaDatasetWrapper(object):
+class SupervisedMetaDatasetWrapper(DatasetGeneratorInterface):
     """Wrapper for accessing single tasks of a Meta-Dataset for supervised training."""
 
     def __init__(self, metadataset: str, metadataset_kwargs: Dict[str, Any], task_idx: int = 0):
