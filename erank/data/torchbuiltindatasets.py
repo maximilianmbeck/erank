@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Tuple, Union
+from typing import Callable, Dict, List, Tuple, Type, Union
 import torch
 import torch.utils.data as data
 import torchvision.transforms as transforms
@@ -18,6 +18,17 @@ CIFAR10_NORMALIZER = {
 _torch_dataset_classes = {'fashion_mnist': datasets.FashionMNIST, 'cifar10': datasets.CIFAR10, 'mnist': datasets.MNIST}
 _default_normalizers = {'fashion_mnist': FMNIST_NORMALIZER, 'cifar10': CIFAR10_NORMALIZER, 'mnist': MNIST_NORMALIZER}
 
+def get_torch_dataset_class(dataset_name: str) -> Type[datasets.VisionDataset]:
+    if dataset_name in _torch_dataset_classes:
+        return _torch_dataset_classes[dataset_name]
+    else:
+        assert False, f"Unknown dataset name \"{dataset_name}\". Available datasets are: {str(_torch_dataset_classes.keys())}"
+
+def get_default_normalizer(dataset_name: str) -> Callable:
+    if dataset_name in _default_normalizers:
+        return _default_normalizers[dataset_name]
+    else:
+        assert False, f"Unknown dataset name \"{dataset_name}\". Available datasets are: {str(_default_normalizers.keys())}"
 
 def _prepare_torchdataset(torch_dataset: str,
                           data_root_path: str,

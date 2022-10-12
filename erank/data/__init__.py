@@ -1,5 +1,4 @@
-from typing import Callable, Type
-from omegaconf import DictConfig
+from typing import Type
 import torch.utils.data as data
 from erank.data.basemetadataset import BaseMetaDataset
 
@@ -13,7 +12,7 @@ _dataset_registry = {'mnist': TorchMnist, 'fashion_mnist': TorchFmnist, 'cifar10
 _metadataset_registry = {'sinus': SinusDataset, 'omniglot': OmniglotDataset, 'mini-imagenet': MiniImagenetDataset}
 
 
-def get_dataset_class(dataset_name: str) -> Callable[[DictConfig], data.Dataset]:
+def get_dataset_class(dataset_name: str) -> Type[data.Dataset]:
     if dataset_name in _dataset_registry:
         return _dataset_registry[dataset_name]
     else:
