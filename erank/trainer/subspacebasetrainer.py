@@ -45,14 +45,17 @@ class SubspaceBaseTrainer(BaseTrainer):
         self._log_additional_logs = self.config.trainer.get('log_additional_logs', False)
 
         exp_data = self.config.experiment_data
+        wandb_args = self.config.get('wandb', {})
+        if isinstance(wandb_args, DictConfig):
+            wandb_args = OmegaConf.to_container(wandb_args, resolve=True, throw_on_missing=True)
+            
         self._logger = Logger(job_name=exp_data.job_name,
                               job_dir=exp_data.experiment_dir,
                               project_name=exp_data.project_name,
                               entity_name=exp_data.get('entity', None),
                               config=OmegaConf.to_container(self.config, resolve=True, throw_on_missing=True),
-                              wandb_args=OmegaConf.to_container(self.config.wandb, resolve=True, throw_on_missing=True))
+                              wandb_args=wandb_args)
         self._logger.setup_logger()
-
 
     def _create_model(self) -> None:
         LOGGER.info(f'Creating model: {self.config.model.name}')

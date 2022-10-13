@@ -9,7 +9,7 @@ run_config:
   exec_type: parallel # sequential
   hostname: gorilla
   gpu_ids: [4, 5, 6, 7]
-  runs_per_gpu: 3
+  runs_per_gpu: 4
 
   wandb: # wandb config for run_handler, if "wandb: null" then logging to wandb is disabled for run_handler
     init:
@@ -26,10 +26,8 @@ seeds:
 sweep:
   type: grid
   axes:
-    - parameter: trainer.batch_size
-      vals: [32, 64, 128, 256]
-    - parameter: trainer.optimizer_scheduler.optimizer_kwargs.lr
-      vals: [0.01, 0.005, 0.001, 0.0005]
+    - parameter: data.dataset_kwargs.rotation_angle
+      vals: linspace(0,180,360,endpoint=True)
 
 start_num: 0 # use this to count how often this config is run
 
@@ -40,7 +38,7 @@ config:
     project_name: sparsity
     experiment_tag: "DEBUG"
     experiment_type: startnum_${start_num}
-    experiment_name: mnist-${config.experiment_data.experiment_tag}.${start_num}_lenet_hypsearch-bs-${config.trainer.batch_size}-lr-${config.trainer.optimizer_scheduler.optimizer_kwargs.lr}
+    experiment_name: mnist-${config.experiment_data.experiment_tag}.${start_num}_lenet_rotated-rot-${config.data.dataset_kwargs.rotation_angle} #-bs-${config.trainer.batch_size}-lr-${config.trainer.optimizer_scheduler.optimizer_kwargs.lr}
     experiment_dir: null
     experiment_notes: Hyperparameter search.
     job_name: null
@@ -48,17 +46,17 @@ config:
     hostname: null # the server on which the run is run, will be filled by run_handler
     gpu_id: 0
 
-  wandb:
-    init:
-      tags: # list(), used to tag wandblogger
-        - ${config.experiment_data.experiment_tag}_exps
-      notes: ${config.experiment_data.experiment_notes} # str, used to make notes to wandblogger
-      group: ${config.experiment_data.experiment_tag} # null
-      job_type: ${config.experiment_data.experiment_type} # examples: hypsearch, pretrain, eval, etc.
+  # wandb:
+  #   init:
+  #     tags: # list(), used to tag wandblogger
+  #       - ${config.experiment_data.experiment_tag}_exps
+  #     notes: ${config.experiment_data.experiment_notes} # str, used to make notes to wandblogger
+  #     group: ${config.experiment_data.experiment_tag} # null
+  #     job_type: ${config.experiment_data.experiment_type} # examples: hypsearch, pretrain, eval, etc.
 
-    watch:
-      log: null #parameters #null #all
-      log_freq: 5000
+  #   watch:
+  #     log: null #parameters #null #all
+  #     log_freq: 5000
 
   model:
     name: fc
@@ -81,13 +79,13 @@ config:
     val_every: 1
     save_every: 10000
     early_stopping_patience: 5
-    batch_size: 64 #XXX
+    batch_size: 128
     optimizer_scheduler:
       optimizer_name: adamw #sgd #adamw
       optimizer_kwargs:
-        lr: 1e-3 #XXX
+        lr: 0.001
         weight_decay: 0.0
-    init_model: null
+    init_model: /system/user/beck/pwbeck/projects/regularization/erank/outputs/mnist-11.0.1_lenet_hypsearch-bs-XXX-lr-XXX_221013_140428/outputs/mnist-11.0.1_lenet_hypsearch-bs-128-lr-0.001-seed0_221013_140514/model_epoch_0.p
 
     loss: crossentropy
 
@@ -97,8 +95,10 @@ config:
     verbose: False
 
   data:
-    dataset: mnist
+    dataset: rotatedvision
     dataset_kwargs:
       data_root_path: /system/user/beck/pwbeck/data
+      dataset: mnist
+      rotation_angle: XXX
     dataset_split:
       train_val_split: 0.8

@@ -20,6 +20,7 @@
             "remotePath": "dragonfly:/system/user/beck/pwbeck/projects/regularization/erank",
             "exclude": [
                 ".vscode/settings.json",
+                ".vscode/launch.json",
                 "__pycache__",
                 ".ipynb_checkpoints", 
                 "outputs/**",
@@ -33,6 +34,7 @@
             "remotePath": "dragonfly:/system/user/beck/pwbeck/projects/regularization/ml_utilities",
             "exclude": [
                 ".vscode/settings.json",
+                ".vscode/launch.json",
                 "__pycache__",
                 ".ipynb_checkpoints", 
                 "outputs/**", 
