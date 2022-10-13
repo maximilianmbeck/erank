@@ -26,22 +26,19 @@ seeds:
 sweep:
   type: grid
   axes:
-    - parameter: trainer.batch_size
-      vals: [32, 64, 128, 256]
-    - parameter: trainer.optimizer_scheduler.optimizer_kwargs.lr
-      vals: [0.01, 0.005, 0.001, 0.0005]
+    - parameter: data.dataset_kwargs.rotatation_angle
+      vals: linspace(0,180,360,endpoint=True)
 
 start_num: 1 # use this to count how often this config is run
-###! RESULT: use parameters bs 128 and lr 0.001 
-###! (there are similar parameters a little bit better, but only later in training)
+
 ###
 config:
   experiment_data:
     entity: jkuiml-fsl
     project_name: sparsity
-    experiment_tag: "11.0"
+    experiment_tag: "11.2"
     experiment_type: startnum_${start_num}
-    experiment_name: mnist-${config.experiment_data.experiment_tag}.${start_num}_lenet_hypsearch-bs-${config.trainer.batch_size}-lr-${config.trainer.optimizer_scheduler.optimizer_kwargs.lr}
+    experiment_name: mnist-${config.experiment_data.experiment_tag}.${start_num}_lenet_rotated-rot-${config.data.dataset_kwargs.rotatation_angle} #-bs-${config.trainer.batch_size}-lr-${config.trainer.optimizer_scheduler.optimizer_kwargs.lr}
     experiment_dir: null
     experiment_notes: Hyperparameter search.
     job_name: null
@@ -82,13 +79,13 @@ config:
     val_every: 1
     save_every: 10000
     early_stopping_patience: 5
-    batch_size: XXX
+    batch_size: 128
     optimizer_scheduler:
       optimizer_name: adamw #sgd #adamw
       optimizer_kwargs:
-        lr: XXX
+        lr: 0.001
         weight_decay: 0.0
-    init_model: null
+    init_model: /system/user/beck/pwbeck/projects/regularization/erank/outputs/mnist-11.0.1_lenet_hypsearch-bs-XXX-lr-XXX_221013_140428/outputs/mnist-11.0.1_lenet_hypsearch-bs-128-lr-0.001-seed0_221013_140514/model_epoch_0.p
 
     loss: crossentropy
 
@@ -98,8 +95,10 @@ config:
     verbose: False
 
   data:
-    dataset: mnist
+    dataset: rotatedvision
     dataset_kwargs:
       data_root_path: /system/user/beck/pwbeck/data
+      dataset: mnist
+      rotation_angle: XXX
     dataset_split:
       train_val_split: 0.8

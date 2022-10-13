@@ -32,6 +32,8 @@ sweep:
       vals: [0.01, 0.005, 0.001, 0.0005]
 
 start_num: 0 # use this to count how often this config is run
+###! RESULT: use parameters bs 128 and lr 0.001 
+###! (there are similar parameters a little bit better, but only later in training)
 
 ###
 config:

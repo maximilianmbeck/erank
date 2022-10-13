@@ -26,22 +26,21 @@ seeds:
 sweep:
   type: grid
   axes:
-    - parameter: trainer.batch_size
-      vals: [32, 64, 128, 256]
-    - parameter: trainer.optimizer_scheduler.optimizer_kwargs.lr
-      vals: [0.01, 0.005, 0.001, 0.0005]
+    - parameter: data.dataset_kwargs.rotatation_angle
+      vals: linspace(0,180,360,endpoint=True)
 
-start_num: 1 # use this to count how often this config is run
+start_num: 0 # use this to count how often this config is run
 ###! RESULT: use parameters bs 128 and lr 0.001 
 ###! (there are similar parameters a little bit better, but only later in training)
+
 ###
 config:
   experiment_data:
     entity: jkuiml-fsl
     project_name: sparsity
-    experiment_tag: "11.0"
+    experiment_tag: "11.3"
     experiment_type: startnum_${start_num}
-    experiment_name: mnist-${config.experiment_data.experiment_tag}.${start_num}_lenet_hypsearch-bs-${config.trainer.batch_size}-lr-${config.trainer.optimizer_scheduler.optimizer_kwargs.lr}
+    experiment_name: mnist-${config.experiment_data.experiment_tag}.${start_num}_rotated-rot-${config.data.dataset_kwargs.rotatation_angle} #-bs-${config.trainer.batch_size}-lr-${config.trainer.optimizer_scheduler.optimizer_kwargs.lr}
     experiment_dir: null
     experiment_notes: Hyperparameter search.
     job_name: null
@@ -62,16 +61,40 @@ config:
       log_freq: 5000
 
   model:
-    name: fc
+    name: cnn2d
+    out_channels: 64
+    out_units: 10
     model_kwargs:
-      input_size: 784
-      hidden_sizes:
-        - 300
-        - 100
-      output_size: 10
-      flatten_input: True
-      dropout: null
+      image_size: 28
+      in_channels: 1
       act_fn: relu
+      layer_configs:
+        - out_channels: ${config.model.out_channels}
+          kernel_size: 3
+          batch_norm: true
+          stride: 1
+          padding: 0
+          max_pool_kernel_size: 2
+        - out_channels: ${config.model.out_channels}
+          kernel_size: 3
+          batch_norm: true
+          stride: 1
+          padding: 0
+          max_pool_kernel_size: 2
+        - out_channels: ${config.model.out_channels}
+          kernel_size: 3
+          batch_norm: true
+          stride: 1
+          padding: 0
+          # max_pool_kernel_size: {mp_kernel_size}
+        - out_channels: ${config.model.out_channels}
+          kernel_size: 3
+          batch_norm: true
+          stride: 1
+          padding: 0
+          # max_pool_kernel_size: {mp_kernel_size}
+      linear_output_units:
+        - ${config.model.out_units}
 
   trainer:
     training_setup: supervised
@@ -82,13 +105,13 @@ config:
     val_every: 1
     save_every: 10000
     early_stopping_patience: 5
-    batch_size: XXX
+    batch_size: 128
     optimizer_scheduler:
       optimizer_name: adamw #sgd #adamw
       optimizer_kwargs:
-        lr: XXX
+        lr: 0.001
         weight_decay: 0.0
-    init_model: null
+    init_model: /system/user/beck/pwbeck/projects/regularization/erank/outputs/mnist-11.1.0_conv4_hypsearch-bs-XXX-lr-XXX_221013_152359/outputs/mnist-11.1.0_conv4_hypsearch-bs-128-lr-0.001-seed0_221013_152501/model_epoch_0.p
 
     loss: crossentropy
 
