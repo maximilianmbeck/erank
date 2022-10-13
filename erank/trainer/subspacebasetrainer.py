@@ -1,18 +1,14 @@
 import logging
 from typing import Any, Dict, List, Union
 import torch
-import pandas as pd
 from torch import nn
 from omegaconf import DictConfig, OmegaConf
-from pathlib import Path
 from ml_utilities.logger import Logger
-from ml_utilities.utils import convert_dict_to_python_types, convert_listofdicts_to_dictoflists
 from ml_utilities.torch_models import get_model_class
 from ml_utilities.torch_utils import get_loss
 from ml_utilities.trainers.basetrainer import BaseTrainer
 from ml_utilities.torch_utils.factory import create_optimizer_and_scheduler
 from ml_utilities.torch_utils.metrics import get_metric_collection
-from hydra.core.hydra_config import HydraConfig
 from erank.regularization import get_regularizer_class
 from erank.regularization.regularized_loss import RegularizedLoss
 from erank.regularization.subspace_regularizer import SubspaceRegularizer
@@ -78,9 +74,9 @@ class SubspaceBaseTrainer(BaseTrainer):
         LOGGER.info('Creating loss.')
         loss_cls = get_loss(self.config.trainer.loss)
         loss_module = loss_cls(reduction='mean')
+        self._loss = RegularizedLoss(loss_module)
 
         self._subspace_regularizer = self._create_subspace_regularizer(self._model)
-        self._loss = RegularizedLoss(loss_module)
         if self._subspace_regularizer:
             self._loss.add_regularizer(self._subspace_regularizer)
 
