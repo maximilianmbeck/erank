@@ -48,17 +48,17 @@ config:
     hostname: null # the server on which the run is run, will be filled by run_handler
     gpu_id: 0
 
-  wandb:
-    init:
-      tags: # list(), used to tag wandblogger
-        - ${config.experiment_data.experiment_tag}_exps
-      notes: ${config.experiment_data.experiment_notes} # str, used to make notes to wandblogger
-      group: ${config.experiment_data.experiment_tag} # null
-      job_type: ${config.experiment_data.experiment_type} # examples: hypsearch, pretrain, eval, etc.
+  # wandb:
+  #   init:
+  #     tags: # list(), used to tag wandblogger
+  #       - ${config.experiment_data.experiment_tag}_exps
+  #     notes: ${config.experiment_data.experiment_notes} # str, used to make notes to wandblogger
+  #     group: ${config.experiment_data.experiment_tag} # null
+  #     job_type: ${config.experiment_data.experiment_type} # examples: hypsearch, pretrain, eval, etc.
 
-    watch:
-      log: null #parameters #null #all
-      log_freq: 5000
+  #   watch:
+  #     log: null #parameters #null #all
+  #     log_freq: 5000
 
   model:
     name: cnn2d
