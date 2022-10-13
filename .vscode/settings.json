@@ -22,9 +22,10 @@
                 ".vscode/settings.json",
                 ".vscode/launch.json",
                 "__pycache__",
-                ".ipynb_checkpoints", 
+                "*.ipynb_checkpoints", 
                 "outputs/**",
-                "tmp/**"
+                "tmp/**", 
+                "*.out"
             ],
             "deleteFiles": true, 
             "upOnly": true
@@ -36,7 +37,7 @@
                 ".vscode/settings.json",
                 ".vscode/launch.json",
                 "__pycache__",
-                ".ipynb_checkpoints", 
+                "*.ipynb_checkpoints", 
                 "outputs/**", 
                 "tmp/**"
             ], 

@@ -26,7 +26,7 @@ seeds:
 sweep:
   type: grid
   axes:
-    - parameter: data.dataset_kwargs.rotatation_angle
+    - parameter: data.dataset_kwargs.rotation_angle
       vals: linspace(0,180,360,endpoint=True)
 
 start_num: 0 # use this to count how often this config is run
@@ -40,7 +40,7 @@ config:
     project_name: sparsity
     experiment_tag: "11.3"
     experiment_type: startnum_${start_num}
-    experiment_name: mnist-${config.experiment_data.experiment_tag}.${start_num}_rotated-rot-${config.data.dataset_kwargs.rotatation_angle} #-bs-${config.trainer.batch_size}-lr-${config.trainer.optimizer_scheduler.optimizer_kwargs.lr}
+    experiment_name: mnist-${config.experiment_data.experiment_tag}.${start_num}_rotated-rot-${config.data.dataset_kwargs.rotation_angle} #-bs-${config.trainer.batch_size}-lr-${config.trainer.optimizer_scheduler.optimizer_kwargs.lr}
     experiment_dir: null
     experiment_notes: Hyperparameter search.
     job_name: null
@@ -121,8 +121,11 @@ config:
     verbose: False
 
   data:
-    dataset: mnist
+    dataset: rotatedvision
     dataset_kwargs:
       data_root_path: /system/user/beck/pwbeck/data
+      dataset: mnist
+      rotation_angle: XXX
     dataset_split:
       train_val_split: 0.8
+
