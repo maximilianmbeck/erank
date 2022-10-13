@@ -40,7 +40,7 @@ config:
     project_name: sparsity
     experiment_tag: "11.0"
     experiment_type: startnum_${start_num}
-    experiment_name: mnist-${config.experiment_data.experiment_tag}.${start_num}_lenet_hypsearch
+    experiment_name: mnist-${config.experiment_data.experiment_tag}.${start_num}_lenet_hypsearch-bs-${config.trainer.batch_size}-lr-${config.trainer.optimizer_scheduler.optimizer_kwargs.lr}
     experiment_dir: null
     experiment_notes: Hyperparameter search.
     job_name: null
