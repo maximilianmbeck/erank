@@ -31,16 +31,16 @@ sweep:
     - parameter: trainer.optimizer_scheduler.optimizer_kwargs.lr
       vals: [0.01, 0.005, 0.001, 0.0005]
 
-start_num: 1 # use this to count how often this config is run
-###! RESULT: use parameters bs 128 and lr 0.001
+start_num: 0 # use this to count how often this config is run
+
 ###
 config:
   experiment_data:
     entity: jkuiml-fsl
     project_name: sparsity
-    experiment_tag: "11.0"
+    experiment_tag: "11.1"
     experiment_type: startnum_${start_num}
-    experiment_name: mnist-${config.experiment_data.experiment_tag}.${start_num}_lenet_hypsearch-bs-${config.trainer.batch_size}-lr-${config.trainer.optimizer_scheduler.optimizer_kwargs.lr}
+    experiment_name: mnist-${config.experiment_data.experiment_tag}.${start_num}_conv4_hypsearch-bs-${config.trainer.batch_size}-lr-${config.trainer.optimizer_scheduler.optimizer_kwargs.lr}
     experiment_dir: null
     experiment_notes: Hyperparameter search.
     job_name: null
@@ -61,16 +61,40 @@ config:
       log_freq: 5000
 
   model:
-    name: fc
+    name: cnn2d
+    out_channels: 64
+    out_units: 10
     model_kwargs:
-      input_size: 784
-      hidden_sizes:
-        - 300
-        - 100
-      output_size: 10
-      flatten_input: True
-      dropout: null
+      image_size: 28
+      in_channels: 1
       act_fn: relu
+      layer_configs:
+        - out_channels: ${config.model.out_channels}
+          kernel_size: 3
+          batch_norm: true
+          stride: 1
+          padding: 0
+          max_pool_kernel_size: 2
+        - out_channels: ${config.model.out_channels}
+          kernel_size: 3
+          batch_norm: true
+          stride: 1
+          padding: 0
+          max_pool_kernel_size: 2
+        - out_channels: ${config.model.out_channels}
+          kernel_size: 3
+          batch_norm: true
+          stride: 1
+          padding: 0
+          # max_pool_kernel_size: {mp_kernel_size}
+        - out_channels: ${config.model.out_channels}
+          kernel_size: 3
+          batch_norm: true
+          stride: 1
+          padding: 0
+          # max_pool_kernel_size: {mp_kernel_size}
+      linear_output_units:
+        - ${config.model.out_units}
 
   trainer:
     training_setup: supervised
