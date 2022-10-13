@@ -15,7 +15,7 @@ def run_experiment(cfg: DictConfig):
     LOGGER.info(f'Starting experiment with config: \n{OmegaConf.to_yaml(cfg)}')
     warnings.filterwarnings('once')
     cfg = cfg.config
-    cfg.experiment_data.experiment_dir = Path().cwd()
+    cfg.experiment_data.experiment_dir = str(Path().cwd().resolve())
     cfg.experiment_data.job_name = HydraConfig.get().job.name
     trainer_class = get_trainer_class(cfg.trainer.training_setup)
     trainer = trainer_class(config=cfg)
