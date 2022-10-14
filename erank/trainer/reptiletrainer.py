@@ -169,7 +169,7 @@ class ReptileTrainer(SubspaceBaseTrainer):
         # outer loop step / update meta-parameters
         self._optimizer.step()
         self._optimizer.zero_grad()
-        self._train_step += 1
+        self._train_step_idx += 1
 
         #? ERANK: sets a reference to base model
         if self._subspace_regularizer:

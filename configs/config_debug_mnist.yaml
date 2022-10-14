@@ -46,17 +46,17 @@ config:
     hostname: null # the server on which the run is run, will be filled by run_handler
     gpu_id: 0
 
-  # wandb:
-  #   init:
-  #     tags: # list(), used to tag wandblogger
-  #       - ${config.experiment_data.experiment_tag}_exps
-  #     notes: ${config.experiment_data.experiment_notes} # str, used to make notes to wandblogger
-  #     group: ${config.experiment_data.experiment_tag} # null
-  #     job_type: ${config.experiment_data.experiment_type} # examples: hypsearch, pretrain, eval, etc.
+  wandb:
+    init:
+      tags: # list(), used to tag wandblogger
+        - ${config.experiment_data.experiment_tag}_exps
+      notes: ${config.experiment_data.experiment_notes} # str, used to make notes to wandblogger
+      group: ${config.experiment_data.experiment_tag} # null
+      job_type: ${config.experiment_data.experiment_type} # examples: hypsearch, pretrain, eval, etc.
 
-  #   watch:
-  #     log: null #parameters #null #all
-  #     log_freq: 5000
+    watch:
+      log: null #parameters #null #all
+      log_freq: 5000
 
   model: 
     name: fc
@@ -72,10 +72,11 @@ config:
 
   trainer:
     training_setup: supervised
-    n_epochs: 3
+    # n_epochs: 3
+    n_steps: 100
     log_train_step_every: 1
     log_additional_train_step_every_multiplier: 1
-    log_additional_logs: True
+    log_additional_logs: False
     val_every: 1
     save_every: 10000
     early_stopping_patience: 5
