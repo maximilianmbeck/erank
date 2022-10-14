@@ -123,4 +123,5 @@ def plot_models_erank(erank_df: pd.DataFrame,
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.legend(frameon=False, loc='lower center', bbox_to_anchor=(0.5, 1), ncol=legend_columns, mode=None, columnspacing=columnspacing, labelspacing=None)
+    fig.suptitle(fig_title)
     return fig, ax

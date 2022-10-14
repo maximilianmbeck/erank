@@ -113,6 +113,9 @@ def load_multiple_dir_matrices_from_sweep(path_to_runs: Union[str, Path],
                                           num_runs: int = -1,
                                           use_absolute_model_params: bool = False,
                                           device: Union[torch.device, str, int] = "auto") -> Dict[str, torch.Tensor]:
+    """Returns multiple direction matrices in a dictionary. 
+    The dictionary has as keys the name (and the glob pattern for the runs (optionally)) and as values the respective matrix.
+    """
     model_dict = {}
     LOGGER.info(f'Loading {len(name_run_glob_pattern_dict)} matrices from directory: {str(path_to_runs)}.')
     for i, (name, glob_pattern) in enumerate(name_run_glob_pattern_dict.items()):
