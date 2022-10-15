@@ -1,0 +1,107 @@
+defaults:
+  - hydra: jobname_outputdir_format
+  - _self_
+#######
+hydra:
+  verbose: ${config.trainer.verbose}
+#######
+run_config:
+  exec_type: parallel # sequential
+  hostname: gorilla
+  gpu_ids: [4, 5, 6, 7]
+  runs_per_gpu: 5
+
+  wandb: # wandb config for run_handler, if "wandb: null" then logging to wandb is disabled for run_handler
+    init:
+      tags:
+        - ${config.experiment_data.experiment_tag}_exps
+        - run_handler
+      notes: #
+      group: ${config.experiment_data.experiment_tag}
+      job_type: run_handler
+
+seeds:
+  - 0
+
+sweep:
+  type: grid
+  axes:
+    - parameter: data.dataset_kwargs.rotation_angle
+      vals: [0.0] #linspace(0,180,360,endpoint=True)
+
+start_num: 0 # use this to count how often this config is run
+###! RESULT: use parameters bs 128 and lr 0.001 
+###! (there are similar parameters a little bit better, but only later in training)
+
+###
+config:
+  experiment_data:
+    entity: jkuiml-fsl
+    project_name: sparsity
+    experiment_tag: "11.5"
+    experiment_type: startnum_${start_num}
+    experiment_name: mnist-${config.experiment_data.experiment_tag}.${start_num}-lenet
+    experiment_dir: null
+    experiment_notes: Hyperparameter search.
+    job_name: null
+    seed: 0
+    hostname: null # the server on which the run is run, will be filled by run_handler
+    gpu_id: 5
+
+  wandb:
+    init:
+      tags: # list(), used to tag wandblogger
+        - ${config.experiment_data.experiment_tag}_exps
+      notes: ${config.experiment_data.experiment_notes} # str, used to make notes to wandblogger
+      group: ${config.experiment_data.experiment_tag} # null
+      job_type: ${config.experiment_data.experiment_type} # examples: hypsearch, pretrain, eval, etc.
+
+    watch:
+      log: null #parameters #null #all
+      log_freq: 5000
+
+  model:
+    name: fc
+    model_kwargs:
+      input_size: 784
+      hidden_sizes:
+        - 300
+        - 100
+      output_size: 10
+      flatten_input: True
+      dropout: null
+      act_fn: relu
+
+  trainer:
+    training_setup: supervised
+    n_steps: 500
+    log_train_step_every: 1
+    log_additional_train_step_every_multiplier: 1
+    log_additional_logs: True
+    val_every: 10
+    save_every: 5
+    early_stopping_patience: 50
+    batch_size: 128
+    optimizer_scheduler:
+      optimizer_name: adamw #sgd #adamw
+      optimizer_kwargs:
+        lr: 0.001
+        weight_decay: 0.0
+    init_model: null
+
+    loss: crossentropy
+
+    metrics:
+      - Accuracy
+    num_workers: 4
+    verbose: False
+
+  data:
+    dataset: rotatedvision
+    dataset_kwargs:
+      data_root_path: /system/user/beck/pwbeck/data
+      dataset: mnist
+      rotation_angle: 0.0
+    dataset_split:
+      train_val_split: 0.8
+
