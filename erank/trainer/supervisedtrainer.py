@@ -57,7 +57,6 @@ class SupervisedTrainer(SubspaceBaseTrainer):
         self._optimizer.zero_grad()
         loss.backward()
         self._optimizer.step()
-        self._train_step_idx += 1
 
         # metrics & logging
         with torch.no_grad():
@@ -91,15 +90,14 @@ class SupervisedTrainer(SubspaceBaseTrainer):
         if step % self._log_train_step_every == 0:
             log_dict = {**losses_step, **metrics_step, **additional_logs_step}
             self._log_losses_metrics(prefix='train_step',
-                                     epoch=self._epoch,
                                      metrics_epoch=log_dict,
                                      log_to_console=False)
 
-    def _val_epoch(self, epoch: int, trained_model: nn.Module) -> float:
+    def _val_epoch(self, progress_idx: int, trained_model: nn.Module) -> float:
 
         losses_epoch: List[Dict[str, torch.Tensor]] = []
 
-        pbar = tqdm(self._loaders['val'], desc=f'Val epoch {epoch}', file=sys.stdout)
+        pbar = tqdm(self._loaders['val'], desc=f'Val after {self._progress_measure} {progress_idx}', file=sys.stdout)
         for xs, ys in pbar:
             xs, ys = xs.to(self.device), ys.to(self.device)
 
@@ -112,8 +110,8 @@ class SupervisedTrainer(SubspaceBaseTrainer):
 
         # compute mean metrics over dataset
         metrics_epoch = self._val_metrics.compute()
-        val_score = self._finish_val_epoch(epoch, losses_epoch, metrics_epoch)
-        self._plot_predictions(epoch=epoch, model=trained_model)
+        val_score = self._finish_val_epoch(losses_epoch, metrics_epoch)
+        self._plot_predictions(epoch=progress_idx, model=trained_model)
         return val_score
 
     def _plot_predictions(self, epoch: int, model: nn.Module) -> None:
