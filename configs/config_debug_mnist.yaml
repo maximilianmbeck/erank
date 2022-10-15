@@ -26,8 +26,10 @@ seeds:
 sweep:
   type: grid
   axes:
-    - parameter: trainer.regularizer.type
-      vals: ["none"]
+    - parameter: data.dataset_kwargs.rotation_angle
+      vals: linspace(0,180,3,endpoint=True)
+    - parameter: trainer.batch_size
+      vals: [128,256]
 
 start_num: 0 # use this to count how often this config is run
 
@@ -72,8 +74,8 @@ config:
 
   trainer:
     training_setup: supervised
-    n_epochs: 3
-    # n_steps: 200
+    # n_epochs: 3
+    n_steps: 15
     log_train_step_every: 1
     log_additional_train_step_every_multiplier: 1
     log_additional_logs: False
@@ -96,8 +98,10 @@ config:
     verbose: False #True
 
   data:
-    dataset: mnist 
+    dataset: rotatedvision
     dataset_kwargs:
       data_root_path: /home/max/phd/data
+      dataset: mnist
+      rotation_angle: 0.0
     dataset_split:
       train_val_split: 0.8
