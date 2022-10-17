@@ -1,20 +1,35 @@
 import torch
 import logging
 from pathlib import Path
-from typing import Dict, Union
+from typing import Dict, Tuple, Union
 from torch import nn
 from ml_utilities.torch_models.base_model import BaseModel
 from ml_utilities.torch_models import get_model_class
+from ml_utilities.trainers.basetrainer import BEST_MODEL_FILENAME, RUN_PROGRESS_MEASURE_STEP, RUN_PROGRESS_MEASURE_EPOCH
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
 LOGGER = logging.getLogger(__name__)
 
 
-def load_model_from_epoch(run_path: Union[str, Path],
-                          epoch: int,
-                          device: Union[torch.device, str, int] = "auto",
-                          save_name_num_epoch_digits: int = -1) -> BaseModel:
+def get_best_model_idx(
+    run_path: Union[str, Path],
+    possible_specifiers: Tuple[str] = (RUN_PROGRESS_MEASURE_EPOCH, RUN_PROGRESS_MEASURE_STEP)
+) -> Tuple[int, str]:
+
+    for specifier in possible_specifiers:
+        best_model_file = run_path / BEST_MODEL_FILENAME.format(specifier=specifier)
+        if best_model_file.exists():
+            with best_model_file.open('r') as f:
+                best_idx = int(f.read())
+            return (best_idx, specifier)
+    raise ValueError(f'No best file found for run: {run_path}.')
+
+
+def load_model_from_idx(run_path: Union[str, Path],
+                        idx: int,
+                        device: Union[torch.device, str, int] = "auto",
+                        save_name_num_epoch_digits: int = -1) -> BaseModel:
     if isinstance(run_path, str):
         run_path = Path(run_path)
     # load config
@@ -23,26 +38,28 @@ def load_model_from_epoch(run_path: Union[str, Path],
     # get model class
     model_name = config.model.name
     model_class = get_model_class(model_name)
+    # get run progress measure
 
-    model = model_class.load(run_path, model_class.model_save_name(epoch, save_name_num_epoch_digits), device=device)
+    progress_measure = RUN_PROGRESS_MEASURE_EPOCH if config.trainer.get('n_epochs',
+                                                                        -1) > 0 else RUN_PROGRESS_MEASURE_STEP
+
+    model = model_class.load(run_path,
+                             model_class.model_save_name(idx,
+                                                         specifier=progress_measure,
+                                                         num_digits=save_name_num_epoch_digits),
+                             device=device)
     return model
 
 
 def load_best_model(run_path: Union[str, Path],
                     device: Union[torch.device, str, int] = "auto",
                     save_name_num_epoch_digits: int = -1) -> BaseModel:
-    # get best epoch
-    best_epoch_file = run_path / 'best_epoch.txt'
-    if not best_epoch_file.exists():
-        raise ValueError(f'No best epoch file found for run: {run_path}.')
+    best_idx, _ = get_best_model_idx(run_path)
 
-    with best_epoch_file.open('r') as f:
-        best_epoch = int(f.read())
-
-    model = load_model_from_epoch(run_path,
-                                  best_epoch,
-                                  save_name_num_epoch_digits=save_name_num_epoch_digits,
-                                  device=device)
+    model = load_model_from_idx(run_path,
+                                best_idx,
+                                save_name_num_epoch_digits=save_name_num_epoch_digits,
+                                device=device)
     return model
 
 
@@ -90,10 +107,10 @@ def load_directions_matrix_from_task_sweep(path_to_runs: Union[str, Path],
             best_model_vec = nn.utils.parameters_to_vector(best_model.parameters())
 
         if not use_absolute_model_params:
-            init_model = load_model_from_epoch(run_path,
-                                               0,
-                                               save_name_num_epoch_digits=save_name_num_epoch_digits,
-                                               device=device)
+            init_model = load_model_from_idx(run_path,
+                                             0,
+                                             save_name_num_epoch_digits=save_name_num_epoch_digits,
+                                             device=device)
             # compute direction vec
             with torch.no_grad():
                 init_model_vec = nn.utils.parameters_to_vector(init_model.parameters())
