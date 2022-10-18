@@ -16,7 +16,8 @@ def get_best_model_idx(
     run_path: Union[str, Path],
     possible_specifiers: Tuple[str] = (RUN_PROGRESS_MEASURE_EPOCH, RUN_PROGRESS_MEASURE_STEP)
 ) -> Tuple[int, str]:
-
+    if isinstance(run_path, str):
+        run_path = Path(run_path)
     for specifier in possible_specifiers:
         best_model_file = run_path / BEST_MODEL_FILENAME.format(specifier=specifier)
         if best_model_file.exists():
