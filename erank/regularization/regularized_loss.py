@@ -68,8 +68,9 @@ class RegularizedLoss(nn.Module):
                     LOGGER.warning(
                         f'{LOG_LOSS_PREFIX}_{reg_name} is Inf or NaN! Inf: {torch.isinf(loss_reg)} | NaN: {torch.isnan(loss_reg)}'
                     )
-
-        loss_dict[LOG_LOSS_TOTAL_KEY] = loss_total
+                    
+        if len(loss_dict) > 1:
+            loss_dict[LOG_LOSS_TOTAL_KEY] = loss_total
 
         return loss_total, loss_dict
 

@@ -7,18 +7,18 @@ hydra:
 #######
 run_config:
   exec_type: parallel # sequential
-  hostname: max-pc
-  gpu_ids: [0]
+  hostname: gorilla
+  gpu_ids: [4, 5, 6, 7]
   runs_per_gpu: 4
 
-  # wandb: # wandb config for run_handler, if "wandb: null" then logging to wandb is disabled for run_handler
-  #   init:
-  #     tags:
-  #       - ${config.experiment_data.experiment_tag}_exps
-  #       - run_handler
-  #     notes: #
-  #     group: ${config.experiment_data.experiment_tag}
-  #     job_type: run_handler
+  wandb: # wandb config for run_handler, if "wandb: null" then logging to wandb is disabled for run_handler
+    init:
+      tags:
+        - ${config.experiment_data.experiment_tag}_exps
+        - run_handler
+      notes: #
+      group: ${config.experiment_data.experiment_tag}
+      job_type: run_handler
 
 seeds:
   - 0
@@ -26,23 +26,24 @@ seeds:
 sweep:
   type: grid
   axes:
-    - parameter: data.dataset_kwargs.rotation_angle
-      vals: linspace(0,180,3,endpoint=True)
     - parameter: trainer.batch_size
-      vals: [128,256]
+      vals: [32, 64, 128, 256]
+    - parameter: trainer.optimizer_scheduler.optimizer_kwargs.lr
+      vals: [0.01, 0.005, 0.001, 0.0005]
 
-start_num: 0 # use this to count how often this config is run
-
+start_num: 1 # use this to count how often this config is run
+###! RESULT: use parameters bs 128 and lr 0.001 
+###! (there are similar parameters a little bit better, but only later in training)
 ###
 config:
   experiment_data:
     entity: jkuiml-fsl
     project_name: sparsity
-    experiment_tag: "DEBUG"
+    experiment_tag: "11.0"
     experiment_type: startnum_${start_num}
-    experiment_name: sl-mnist-${config.experiment_data.experiment_tag}.${start_num}
+    experiment_name: mnist-${config.experiment_data.experiment_tag}.${start_num}_lenet_hypsearch-bs-${config.trainer.batch_size}-lr-${config.trainer.optimizer_scheduler.optimizer_kwargs.lr}
     experiment_dir: null
-    experiment_notes: Debugging for supervised sinus.
+    experiment_notes: Hyperparameter search.
     job_name: null
     seed: 0
     hostname: null # the server on which the run is run, will be filled by run_handler
@@ -60,11 +61,11 @@ config:
       log: null #parameters #null #all
       log_freq: 5000
 
-  model: 
+  model:
     name: fc
     model_kwargs:
       input_size: 784
-      hidden_sizes: 
+      hidden_sizes:
         - 300
         - 100
       output_size: 10
@@ -74,20 +75,19 @@ config:
 
   trainer:
     training_setup: supervised
-    # n_epochs: 3
-    n_steps: 15
+    n_epochs: 50
     log_train_step_every: 1
     log_additional_train_step_every_multiplier: 1
-    log_additional_logs: False
-    val_every: 5
+    log_additional_logs: True
+    val_every: 1
     save_every: 10000
-    early_stopping_patience: 50
-    batch_size: 256
+    early_stopping_patience: 5
+    batch_size: XXX
     optimizer_scheduler:
       optimizer_name: adamw #sgd #adamw
       optimizer_kwargs:
-        lr: 0.001 #1.0 # our sine: 0.1 # default sine: 0.001
-        weight_decay: 0.0 #0.001
+        lr: XXX
+        weight_decay: 0.0
     init_model: null
 
     loss: crossentropy
@@ -95,13 +95,11 @@ config:
     metrics:
       - Accuracy
     num_workers: 4
-    verbose: False #True
+    verbose: False
 
   data:
-    dataset: rotatedvision
+    dataset: mnist
     dataset_kwargs:
-      data_root_path: /home/max/phd/data
-      dataset: mnist
-      rotation_angle: 0.0
+      data_root_path: /system/user/beck/pwbeck/data
     dataset_split:
       train_val_split: 0.8

@@ -1,8 +1,7 @@
 import logging
 import sys
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union
 import torch
-import torch.utils.data as data
 from tqdm import tqdm
 from torch import nn
 from omegaconf import DictConfig
@@ -47,52 +46,28 @@ class SupervisedTrainer(SubspaceBaseTrainer):
         LOGGER.info(f'Size of training/validation set: ({len(train_set)}/{len(val_set)})')
         self._datasets = dict(train=train_set, val=val_set)
 
-    def _create_dataloaders(self) -> None:
-        train_loader = data.DataLoader(dataset=self._datasets['train'],
-                                       batch_size=self.config.trainer.batch_size,
-                                       shuffle=True,
-                                       drop_last=False,
-                                       num_workers=self.config.trainer.num_workers,
-                                       persistent_workers=True)
-        val_loader = data.DataLoader(dataset=self._datasets['val'],
-                                     batch_size=self.config.trainer.batch_size,
-                                     shuffle=True,
-                                     drop_last=False,
-                                     num_workers=self.config.trainer.num_workers,
-                                     persistent_workers=True)
-        self._loaders = dict(train=train_loader, val=val_loader)
+    def _train_step(self, train_batch, batch_idx: int) -> Dict[str, Union[float, torch.Tensor]]:
+        xs, ys = train_batch
+        xs, ys = xs.to(self.device), ys.to(self.device)
+        # forward pass
+        ys_pred = self._model(xs)
+        loss, loss_dict = self._loss(ys_pred, ys, self._model)
 
-    def _train_epoch(self, epoch: int) -> None:
-        # setup logging
-        losses_epoch: List[Dict[str, torch.Tensor]] = []
+        # backward pass
+        self._optimizer.zero_grad()
+        loss.backward()
+        self._optimizer.step()
 
-        # training loop (iterations per epoch)
-        pbar = tqdm(self._loaders['train'], desc=f'Train epoch {epoch}', file=sys.stdout)
-        for xs, ys in pbar:
-            xs, ys = xs.to(self.device), ys.to(self.device)
-            # forward pass
-            ys_pred = self._model(xs)
-            loss, loss_dict = self._loss(ys_pred, ys, self._model)
-
-            # backward pass
-            self._optimizer.zero_grad()
-            loss.backward()
-            self._optimizer.step()
-            self._train_step += 1
-
-            # metrics & logging
-            with torch.no_grad():
-                metric_vals = self._train_metrics(ys_pred, ys)
-            additional_logs = self._get_additional_train_step_log(self._train_step)
-            # log step
-            self._log_step(step=self._train_step,
-                           losses_step=loss_dict,
-                           metrics_step=metric_vals,
-                           additional_logs_step=additional_logs)
-
-        # log epoch
-        metrics_epoch = self._train_metrics.compute()
-        self._finish_train_epoch(epoch, losses_epoch, metrics_epoch)
+        # metrics & logging
+        with torch.no_grad():
+            metric_vals = self._train_metrics(ys_pred, ys)
+        additional_logs = self._get_additional_train_step_log(self._train_step_idx)
+        # log step
+        self._log_step(step=self._train_step_idx,
+                       losses_step=loss_dict,
+                       metrics_step=metric_vals,
+                       additional_logs_step=additional_logs)
+        return loss_dict
 
     def _get_additional_train_step_log(self, step: int) -> Dict[str, Any]:
         log_dict = {}
@@ -115,15 +90,14 @@ class SupervisedTrainer(SubspaceBaseTrainer):
         if step % self._log_train_step_every == 0:
             log_dict = {**losses_step, **metrics_step, **additional_logs_step}
             self._log_losses_metrics(prefix='train_step',
-                                     epoch=self._epoch,
                                      metrics_epoch=log_dict,
                                      log_to_console=False)
 
-    def _val_epoch(self, epoch: int, trained_model: nn.Module) -> float:
+    def _val_epoch(self, progress_idx: int, trained_model: nn.Module) -> float:
 
         losses_epoch: List[Dict[str, torch.Tensor]] = []
 
-        pbar = tqdm(self._loaders['val'], desc=f'Val epoch {epoch}', file=sys.stdout)
+        pbar = tqdm(self._loaders['val'], desc=f'Val after {self._progress_measure} {progress_idx}', file=sys.stdout)
         for xs, ys in pbar:
             xs, ys = xs.to(self.device), ys.to(self.device)
 
@@ -136,8 +110,8 @@ class SupervisedTrainer(SubspaceBaseTrainer):
 
         # compute mean metrics over dataset
         metrics_epoch = self._val_metrics.compute()
-        val_score = self._finish_val_epoch(epoch, losses_epoch, metrics_epoch)
-        self._plot_predictions(epoch=epoch, model=trained_model)
+        val_score = self._finish_val_epoch(losses_epoch, metrics_epoch)
+        self._plot_predictions(epoch=progress_idx, model=trained_model)
         return val_score
 
     def _plot_predictions(self, epoch: int, model: nn.Module) -> None:

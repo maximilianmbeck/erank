@@ -169,7 +169,7 @@ class ReptileTrainer(SubspaceBaseTrainer):
         # outer loop step / update meta-parameters
         self._optimizer.step()
         self._optimizer.zero_grad()
-        self._train_step += 1
+        self._train_step_idx += 1
 
         #? ERANK: sets a reference to base model
         if self._subspace_regularizer:
@@ -249,7 +249,7 @@ class ReptileTrainer(SubspaceBaseTrainer):
 
             if torch.isnan(loss):
                 raise RuntimeError(
-                    f'Loss NaN in inner iteration {i} of epoch {self._epoch}. Single Loss Terms: \n{pd.Series(convert_dict_to_python_types(loss_dict), dtype=float)}'
+                    f'Loss NaN in inner iteration {i} of epoch {self._epoch_idx}. Single Loss Terms: \n{pd.Series(convert_dict_to_python_types(loss_dict), dtype=float)}'
                 )
 
             loss_dict['weight_norm'] = compute_weight_norm(inner_model)
@@ -452,7 +452,7 @@ class ReptileTrainer(SubspaceBaseTrainer):
                                  log_to_console=False)
         val_score_metric_name = list(self._val_metrics.keys())[0]  # the first metric in val_metrics
         val_score = losses_eval_after_df.mean()[f'{val_score_metric_name}{LOG_SEP_SYMBOL}after']
-        self._reset_metrics()
+        self._reset_metrics('val')
         return val_score
 
     def __plot_inner_learning_curves(self,
