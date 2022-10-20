@@ -1,13 +1,8 @@
 import logging
-from typing import Any, Dict, List, Union
-import torch
 from torch import nn
-from omegaconf import DictConfig, OmegaConf
-from ml_utilities.logger import Logger
+from omegaconf import DictConfig
 from ml_utilities.torch_utils import get_loss
 from ml_utilities.trainers.supervisedbasetrainer import SupervisedBaseTrainer
-from ml_utilities.torch_utils.factory import create_optimizer_and_scheduler
-from ml_utilities.torch_utils.metrics import get_metric_collection
 from erank.regularization import get_regularizer_class
 from erank.regularization.regularized_loss import RegularizedLoss
 from erank.regularization.subspace_regularizer import SubspaceRegularizer
