@@ -95,7 +95,7 @@ def load_directions_matrix_from_task_sweep(path_to_runs: Union[str, Path],
         num_runs = len(run_list)
     elif num_runs > len(run_list):
         raise ValueError(
-            f'Try to load {num_runs} runs, but the directory {str(path_to_runs)} contains only {len(run_list)} runs with glob patter `{glob_pattern}`!'
+            f'Try to load {num_runs} runs, but the directory {str(path_to_runs)} contains only {len(run_list)} runs with glob pattern `{glob_pattern}`!'
         )
 
     directions = []
