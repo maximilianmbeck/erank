@@ -21,4 +21,4 @@ which python
 NUM_CORES=32
 export MKL_NUM_THREADS=$NUM_CORES OMP_NUM_THREADS=$NUM_CORES
 
-python run_sweep.py --config-name 11.7_mnist_lenet_rotatedtasks.yaml
+python run_sweep.py --config-name 11.9.1_fmnist_lenet_rotatedtasks.yaml

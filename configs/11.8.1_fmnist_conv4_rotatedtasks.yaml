@@ -1,0 +1,135 @@
+defaults:
+  - hydra: jobname_outputdir_format
+  - _self_
+#######
+hydra:
+  verbose: ${config.trainer.verbose}
+#######
+run_config:
+  exec_type: parallel # sequential
+  hostname: gorilla
+  gpu_ids: [4, 5, 6, 7]
+  runs_per_gpu: 5
+
+  wandb: # wandb config for run_handler, if "wandb: null" then logging to wandb is disabled for run_handler
+    init:
+      tags:
+        - ${config.experiment_data.experiment_tag}_exps
+        - run_handler
+      notes: #
+      group: ${config.experiment_data.experiment_tag}
+      job_type: run_handler
+
+seeds:
+  - 0
+
+sweep:
+  type: grid
+  axes:
+    - parameter: trainer.init_model_step
+      vals: [0, 5, 10, 15, 20, 50, 100, 480]
+    - parameter: data.dataset_kwargs.rotation_angle
+      vals: linspace(0,180,360,endpoint=True)
+
+start_num: 1_ft # use this to count how often this config is run
+###! RESULT: use parameters bs 128 and lr 0.001 
+###! (there are similar parameters a little bit better, but only later in training)
+
+###
+config:
+  experiment_data:
+    entity: jkuiml-fsl
+    project_name: sparsity
+    experiment_tag: "11.8"
+    experiment_type: startnum_${start_num}
+    experiment_name: fmnist-${config.experiment_data.experiment_tag}.${start_num}-conv4_rotatedtasks
+    experiment_dir: null
+    experiment_notes: 
+    job_name: null
+    seed: 0
+    hostname: null # the server on which the run is run, will be filled by run_handler
+    gpu_id: 0
+
+  # wandb:
+  #   init:
+  #     tags: # list(), used to tag wandblogger
+  #       - ${config.experiment_data.experiment_tag}_exps
+  #     notes: ${config.experiment_data.experiment_notes} # str, used to make notes to wandblogger
+  #     group: ${config.experiment_data.experiment_tag} # null
+  #     job_type: ${config.experiment_data.experiment_type} # examples: hypsearch, pretrain, eval, etc.
+
+  #   watch:
+  #     log: null #parameters #null #all
+  #     log_freq: 5000
+
+  model:
+    name: cnn2d
+    out_channels: 64
+    out_units: 10
+    model_kwargs:
+      image_size: 28
+      in_channels: 1
+      act_fn: relu
+      layer_configs:
+        - out_channels: ${config.model.out_channels}
+          kernel_size: 3
+          batch_norm: true
+          stride: 1
+          padding: 0
+          max_pool_kernel_size: 2
+        - out_channels: ${config.model.out_channels}
+          kernel_size: 3
+          batch_norm: true
+          stride: 1
+          padding: 0
+          max_pool_kernel_size: 2
+        - out_channels: ${config.model.out_channels}
+          kernel_size: 3
+          batch_norm: true
+          stride: 1
+          padding: 0
+          # max_pool_kernel_size: {mp_kernel_size}
+        - out_channels: ${config.model.out_channels}
+          kernel_size: 3
+          batch_norm: true
+          stride: 1
+          padding: 0
+          # max_pool_kernel_size: {mp_kernel_size}
+      linear_output_units:
+        - ${config.model.out_units}
+
+  trainer:
+    training_setup: supervised
+    n_steps: 2000
+    log_train_step_every: 1
+    log_additional_train_step_every_multiplier: 1
+    log_additional_logs: True
+    val_every: 5
+    save_every: 500
+    early_stopping_patience: 400
+    batch_size: 128
+    optimizer_scheduler:
+      optimizer_name: adamw #sgd #adamw
+      optimizer_kwargs:
+        lr: 0.001
+        weight_decay: 0.0
+    
+    init_model_step: 0
+    init_model: /system/user/beck/pwbeck/projects/regularization/erank/outputs/fmnist-11.8.0_pretrain-conv4--221022_165717/outputs/fmnist-11.8.0_pretrain-conv4--rotation_angle-0.0-seed-0--221022_165731/model_step_${config.trainer.init_model_step}.p
+
+    loss: crossentropy
+
+    metrics:
+      - Accuracy
+    num_workers: 4
+    verbose: False
+
+  data:
+    dataset: rotatedvision
+    dataset_kwargs:
+      data_root_path: /system/user/beck/pwbeck/data
+      dataset: fashion_mnist
+      rotation_angle: 0.0
+    dataset_split:
+      train_val_split: 0.8
+
