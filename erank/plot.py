@@ -128,5 +128,5 @@ def plot_models_erank(erank_df: pd.DataFrame,
 
 ### plot weight histogram
 
-def plot_weight_histogram(weights: Dict[str, Any]):
-    pass
+# def plot_weight_histogram(weights: Dict[str, Any]):
+#     pass
