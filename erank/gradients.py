@@ -24,6 +24,17 @@ class GradientCalculator:
                  model_idx: int = -1,
                  default_loss: Union[str, nn.Module] = None,
                  device: Union[str, int] = 'auto'):
+        """This class calculates local gradients at a given model checkpoint. 
+
+        Args:
+            dataset_generator_kwargs (DictConfig): Config for dataset generation.
+            model_name (str, optional): Typename of the model. Must be specified, if a model path is given. Defaults to ''.
+            model_path (Union[str, Path], optional): A path to a model checkpoint. Defaults to None.
+            run_path (Union[str, Path], optional): A path to a run directory of an earlier run from where a model checkpoint is loaded. Defaults to None.
+            model_idx (int, optional): The model checkpoint to be loaded. Defaults to -1.
+            default_loss (Union[str, nn.Module], optional): A default loss, such that the loss must not specified each time when gradients are computed. Defaults to None.
+            device (Union[str, int], optional): The device. Defaults to 'auto'.
+        """
         self.device = get_device(device)
         # load model
         if model_name and model_path:
@@ -58,6 +69,16 @@ class GradientCalculator:
         return loss_fn
 
     def compute_gradients(self, batch_size: int, num_gradients: int = -1, loss: Union[str, nn.Module] = None) -> List[torch.Tensor]:
+        """Compute stochastic gradients with a given batch size.
+
+        Args:
+            batch_size (int): The batch size.
+            num_gradients (int, optional): Number of gradients. If -1, gradients for full pass over dataset. Defaults to -1.
+            loss (Union[str, nn.Module], optional): The loss for gradient calculation. If None use the default loss. Defaults to None.
+
+        Returns:
+            List[torch.Tensor]: The gradients.
+        """
         dataloader = data.DataLoader(self.dataset, batch_size=batch_size, shuffle=False, drop_last=False)
         loss_fn = self.default_loss_fn
         if loss_fn is None:
@@ -83,12 +104,6 @@ class GradientCalculator:
             gradients.append(grad)
 
         return gradients
-
-
-
-
-
-
 
 
 def apply_gradient_mask():
