@@ -39,11 +39,11 @@ def create_model_erank_df(models: Union[torch.Tensor, Dict[str, torch.Tensor]],
             models[descr] = model_matrix.to(device=device)
             if not model_matrix_shape:
                 model_matrix_shape = model_matrix.shape
-            assert model_matrix_shape == model_matrix.shape, f'Shape of `{descr}` model matrix does not match!'
+            assert model_matrix_shape[1] == model_matrix.shape[1], f'Shape of `{descr}` model matrix does not match!'
             model_erank_data[descr] = []
         erank_data.update(model_erank_data)
 
-    num_vectors = model_matrix_shape[0]
+    num_vectors = model_matrix_shape[0] # TODO handle case when matrices have different number of vectors
     assert isinstance(models, dict)
 
     random_vecs = None
