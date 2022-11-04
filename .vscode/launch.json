@@ -5,19 +5,19 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "run.py mnist supervised local",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceFolder}/run.py",
-            "args": ["--config-name", "config_debug_mnist.yaml"],
-            "console": "integratedTerminal",
-            "justMyCode": false
-        },
-        {
             "name": "run_sweep.py mnist supervised local",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/run_sweep.py",
+            "args": ["--config-name", "debug_server_mnist_lenet_hypsearch.yaml"],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "run.py mnist supervised local",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/run.py",
             "args": ["--config-name", "config_debug_mnist.yaml"],
             "console": "integratedTerminal",
             "justMyCode": false

@@ -19,13 +19,11 @@
             "localPath": "${workspaceFolder}",
             "remotePath": "dragonfly:/system/user/beck/pwbeck/projects/regularization/erank",
             "exclude": [
-                ".vscode/settings.json",
-                ".vscode/launch.json",
+                // ".vscode/settings.json",
                 "__pycache__",
-                "*.ipynb_checkpoints", 
+                ".ipynb_checkpoints", 
                 "outputs/**",
-                "tmp/**", 
-                "*.out"
+                "tmp/**"
             ],
             "deleteFiles": true, 
             "upOnly": true
@@ -34,10 +32,9 @@
             "localPath": "${workspaceFolder}/../ml_utilities",
             "remotePath": "dragonfly:/system/user/beck/pwbeck/projects/regularization/ml_utilities",
             "exclude": [
-                ".vscode/settings.json",
-                ".vscode/launch.json",
+                // ".vscode/settings.json",
                 "__pycache__",
-                "*.ipynb_checkpoints", 
+                ".ipynb_checkpoints", 
                 "outputs/**", 
                 "tmp/**"
             ], 
