@@ -3,7 +3,7 @@ import torch
 import pandas as pd
 from pathlib import Path
 from omegaconf import DictConfig, OmegaConf
-from ml_utilities.torch_models.base_model import BaseModel
+from ml_utilities.torch_models.base_model import BaseModel, FN_MODEL_FILE_EXT, FN_MODEL_PREFIX
 from ml_utilities.run_utils.sweep import OVERRIDE_PARAMS_KEY
 from ml_utilities.logger import LOG_FOLDERNAME, FN_FINAL_RESULTS, FN_DATA_LOG, FN_DATA_LOG_PREFIX
 from ml_utilities.trainers.basetrainer import RUN_PROGRESS_MEASURE_STEP
@@ -64,6 +64,22 @@ class JobResult:
         _, progress_measure = get_best_model_idx(self._job_dir)
         return progress_measure
 
+    @property
+    def available_model_checkpoint_indices(self) -> List[int]:
+        """The available model checkpoints."""
+        idxes = [
+            int(p.stem.replace(FN_MODEL_PREFIX, '').replace(self.progress_measure, '').replace('_', ''))
+            for p in self._job_dir.glob(pattern=f'{FN_MODEL_PREFIX}*{FN_MODEL_FILE_EXT}')
+        ]
+        idxes.sort()
+        return idxes
+
+    @property
+    def best_model_idx(self) -> int:
+        """The best model index."""
+        best_idx, _ = get_best_model_idx(self._job_dir)
+        return best_idx
+
     def get_model_idx(
         self,
         idx: int = -1,
@@ -106,7 +122,7 @@ class JobResult:
         if log_source:
             assert col_sel, 'Must provide a column selection.'
             assert isinstance(col_sel, list), 'Selected columns must be provided as list.'
-            
+
             if not row_sel:
                 idx, progress_measure = get_best_model_idx(self._job_dir)
                 if progress_measure == RUN_PROGRESS_MEASURE_STEP:
@@ -167,7 +183,7 @@ class SweepResult:
     @property
     def directory(self) -> Path:
         return self._sweep_dir
-    
+
     @property
     def sweep_params(self) -> List[str]:
         cfg = OmegaConf.load(self._sweep_dir / '.hydra' / 'config.yaml')
