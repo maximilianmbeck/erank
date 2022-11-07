@@ -6,7 +6,7 @@ from collections import deque
 from pathlib import Path
 from typing import Deque, Dict, Union
 from torch import nn
-from erank.utils import load_directions_matrix_from_task_sweep
+from erank.output_loader.model_loader import load_directions_matrix_from_task_sweep
 
 from erank.regularization.base_regularizer import Regularizer
 

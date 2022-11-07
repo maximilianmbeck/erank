@@ -12,7 +12,7 @@ from ml_utilities.torch_models import get_model_class
 from ml_utilities.torch_utils import get_loss, gradients_to_vector
 from erank.data.datasetgenerator import DatasetGenerator
 
-from erank.utils import load_best_model, load_model_from_idx
+from erank.output_loader.model_loader import load_best_model, load_model_from_idx
 
 
 class GradientCalculator:

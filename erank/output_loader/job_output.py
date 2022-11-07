@@ -9,7 +9,7 @@ from ml_utilities.logger import LOG_FOLDERNAME, FN_FINAL_RESULTS, FN_DATA_LOG, F
 from ml_utilities.trainers.basetrainer import RUN_PROGRESS_MEASURE_STEP
 from ml_utilities.utils import flatten_hierarchical_dict
 from tqdm import tqdm
-from erank.utils import get_best_model_idx, load_model_from_idx
+from erank.output_loader.model_loader import get_best_model_idx, load_model_from_idx
 
 
 class JobResult:
