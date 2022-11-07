@@ -23,7 +23,8 @@
                 "__pycache__",
                 ".ipynb_checkpoints", 
                 "outputs/**",
-                "tmp/**"
+                "tmp/**",
+                "outputs-project-erank_meta/**"
             ],
             "deleteFiles": true, 
             "upOnly": true
@@ -40,6 +41,16 @@
             ], 
             "deleteFiles": true, 
             "upOnly": true
+        }, 
+        {
+            "localPath": "${workspaceFolder}/../lfmd_notebooks",
+            "remotePath": "dragonfly:/system/user/beck/pwbeck/projects/regularization/lfmd_notebooks",
+            "exclude": [
+                "__pycache__",
+                ".ipynb_checkpoints", 
+            ], 
+            "deleteFiles": true, 
+            "upOnly": false
         }
     ],
 }
