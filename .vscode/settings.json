@@ -27,7 +27,7 @@
                 "outputs-project-erank_meta/**"
             ],
             "deleteFiles": true, 
-            "upOnly": true
+            // "upOnly": true 
         }, 
         {
             "localPath": "${workspaceFolder}/../ml_utilities",
@@ -40,7 +40,7 @@
                 "tmp/**"
             ], 
             "deleteFiles": true, 
-            "upOnly": true
+            // "upOnly": true
         }, 
         {
             "localPath": "${workspaceFolder}/../lfmd_notebooks",
@@ -50,7 +50,7 @@
                 ".ipynb_checkpoints", 
             ], 
             "deleteFiles": true, 
-            "upOnly": false
+            // "upOnly": false
         }
     ],
 }
