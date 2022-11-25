@@ -7,9 +7,9 @@ hydra:
 #######
 run_config:
   exec_type: parallel # sequential
-  hostname: raptor
-  gpu_ids: [0]
-  runs_per_gpu: 1
+  hostname: gorilla
+  gpu_ids: [4, 5, 6, 7]
+  runs_per_gpu: 5
 
   wandb: # wandb config for run_handler, if "wandb: null" then logging to wandb is disabled for run_handler
     init:
@@ -36,7 +36,7 @@ config:
   experiment_data:
     entity: jkuiml-fsl
     project_name: sparsity
-    experiment_tag: "DEBUG"
+    experiment_tag: "11.5"
     experiment_type: startnum_${start_num}
     experiment_name: mnist-${config.experiment_data.experiment_tag}.${start_num}-lenet
     experiment_dir: null
@@ -44,7 +44,7 @@ config:
     job_name: null
     seed: 0
     hostname: null # the server on which the run is run, will be filled by run_handler
-    gpu_id: 0
+    gpu_id: 5
 
   wandb:
     init:
