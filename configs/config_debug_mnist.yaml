@@ -20,14 +20,13 @@ run_config:
       group: ${config.experiment_data.experiment_tag}
       job_type: run_handler
 
-seeds:
-  - 0
+seeds: [1,2]
 
 sweep:
   type: grid
   axes:
     - parameter: data.dataset_kwargs.rotation_angle
-      vals: [0.0] #linspace(0,180,360,endpoint=True)
+      vals: linspace(0,180,360,endpoint=True)
 
 start_num: 0 # use this to count how often this config is run
 
