@@ -10,9 +10,8 @@ from tqdm import tqdm
 from ml_utilities.utils import get_device
 from ml_utilities.torch_models import get_model_class
 from ml_utilities.torch_utils import get_loss, gradients_to_vector
+from ml_utilities.output_loader.model_loader import load_best_model, load_model_from_idx
 from erank.data.datasetgenerator import DatasetGenerator
-
-from erank.output_loader.model_loader import load_best_model, load_model_from_idx
 
 
 class GradientCalculator:
@@ -86,7 +85,7 @@ class GradientCalculator:
     def compute_gradients(self,
                           batch_size: int,
                           num_gradients: int = -1,
-                          loss: Union[str, nn.Module] = None, 
+                          loss: Union[str, nn.Module] = None,
                           model_idx: int = -1) -> List[torch.Tensor]:
         """Compute stochastic gradients with a given batch size.
 
@@ -129,6 +128,7 @@ class GradientCalculator:
 
         return gradients
 
+
 class GradientAnalyzer:
     """This class collects all local gradient analysis methods."""
 
@@ -143,6 +143,7 @@ class GradientMasker:
     # TODO implement this
     pass
 
+
 # def apply_gradient_mask():
 #     # TODO make this a callable class
 #     # find best way to store gradient mask:
@@ -151,8 +152,8 @@ class GradientMasker:
 #     # probably best way is option b)
 #     pass
 
-
 ### Utility functions
+
 
 def magnitude_pruning_thresholds(vecs: torch.Tensor,
                                  frac_entries_to_prune: float,
