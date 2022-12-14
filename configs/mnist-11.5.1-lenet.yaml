@@ -1,0 +1,92 @@
+defaults:
+- hydra: jobname_outputdir_format
+- _self_
+run_config:
+  exec_type: parallel
+  hostname: raptor
+  gpu_ids:
+  - 0
+  runs_per_gpu: 2
+  wandb:
+    init:
+      tags:
+      - ${config.experiment_data.experiment_tag}_exps
+      - run_handler
+      notes: null
+      group: ${config.experiment_data.experiment_tag}
+      job_type: run_handler
+seeds:
+- 1
+- 2
+sweep:
+  type: grid
+  axes:
+  - parameter: data.dataset_kwargs.rotation_angle
+    vals:
+    - 0.0
+start_num: 1
+config:
+  experiment_data:
+    entity: jkuiml-fsl
+    project_name: sparsity
+    experiment_tag: '11.5'
+    experiment_type: startnum_${start_num}
+    experiment_name: mnist-${config.experiment_data.experiment_tag}.${start_num}-lenet
+    experiment_dir: null
+    experiment_notes: Different random inits for mode connectivity analysis.
+    job_name: null
+    seed: 0
+    hostname: null
+    gpu_id: 5
+  wandb:
+    init:
+      tags:
+      - ${config.experiment_data.experiment_tag}_exps
+      notes: ${config.experiment_data.experiment_notes}
+      group: ${config.experiment_data.experiment_tag}
+      job_type: ${config.experiment_data.experiment_type}
+    watch:
+      log: null
+      log_freq: 5000
+  model:
+    name: fc
+    model_kwargs:
+      input_size: 784
+      hidden_sizes:
+      - 300
+      - 100
+      output_size: 10
+      flatten_input: true
+      dropout: null
+      act_fn: relu
+  trainer:
+    training_setup: supervised
+    n_steps: 2000
+    log_train_step_every: 1
+    log_additional_train_step_every_multiplier: 1
+    log_additional_logs: true
+    val_every: 5
+    save_every: 5
+    early_stopping_patience: 200
+    batch_size: 128
+    optimizer_scheduler:
+      optimizer_name: adamw
+      optimizer_kwargs:
+        lr: 0.001
+        weight_decay: 0.0
+    init_model: null
+    loss: crossentropy
+    metrics:
+    - Accuracy
+    num_workers: 4
+    verbose: false
+  data:
+    dataset: rotatedvision
+    dataset_kwargs:
+      data_root_path: /system/user/beck/pwbeck/data
+      dataset: mnist
+      rotation_angle: 0.0
+    dataset_split:
+      train_val_split: 0.8
+__config_created: '2022-12-14 10:24:30'
+__config_last_updated: '2022-12-14 10:24:30'
