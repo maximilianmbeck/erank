@@ -1,21 +1,143 @@
-from collections import OrderedDict
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 import sys
 import copy
 import torch
+import pandas as pd
+import numpy as np
 from torch import nn
 from torchmetrics import Metric
 import torch.utils.data as data
 from tqdm import tqdm
 
+from ml_utilities.output_loader.job_output import JobResult
+from ml_utilities.utils import get_device, hyp_param_cfg_to_str
+from ml_utilities.run_utils.run_handler import EXP_NAME_DIVIDER
+from erank.data.datasetgenerator import DatasetGenerator
 
-class LinearInterpolator:
 
-    def __init__(self, dataset: data.Dataset):
+class InstabilityAnalyzer:
+
+    def __init__(self, run_0: JobResult, run_1: JobResult):
+        # setup all variables for linear interpolation
+        # [check if runs are successful]
+
+        # check if runs are compatible (e.g. same architecture)
+
         pass
 
     def interpolate(self):
         pass
+
+
+def interpolate_linear_runs(
+        run_0: JobResult,
+        run_1: JobResult,
+        score_fn: Union[nn.Module, Metric],
+        model_idx: Union[int, List[int]] = -1,
+        interpolation_factors: torch.Tensor = torch.linspace(0.0, 1.0, 5),
+        interpolation_on_train_data: bool = True,
+        interpolate_linear_kwargs: Dict[str, Any] = {},
+        device: Union[torch.device, str, int] = 'auto',
+        return_dataframe: bool = True) -> Union[Dict[str, Any], Tuple[pd.DataFrame, Optional[pd.DataFrame]]]:
+
+    device = get_device(device)
+    if isinstance(model_idx, int):
+        model_idx = [model_idx]
+
+    # use run_0 to determine interpolation name and seeds
+    interpolation_name = run_0.experiment_name + EXP_NAME_DIVIDER + hyp_param_cfg_to_str(run_0.override_hpparams)
+    interpolation_seeds = (run_0.experiment_data.seed, run_1.experiment_data.seed)
+
+    # use dataset from run_0 for dataset setup
+    data_cfg = run_0.config.config.data
+    ds_generator = DatasetGenerator(**data_cfg)
+    ds_generator.generate_dataset()
+
+    other_datasets = {'val': ds_generator.val_split}
+    if 'other_datasets' in interpolate_linear_kwargs:
+        other_datasets.update(interpolate_linear_kwargs['other_datasets'])
+
+    res_dict = {}  # contains all interpolation results as dictionary
+    dataset_series: List[pd.Series] = []
+    distance_series: List[pd.Series] = []
+
+    runs = [run_0, run_1]
+    for midx in model_idx:
+        models = []
+        m_idxes = []
+        for i, r in enumerate(runs):
+            try:
+                m = r.get_model_idx(idx=midx, device=device)
+            except FileNotFoundError:
+                raise ValueError(f'Missing model_idx={midx} in run_{i}: {r}')
+            models.append(m)
+            if midx == -1:
+                m_idxes.append(r.best_model_idx)
+            else:
+                m_idxes.append(midx)
+
+        model_0, model_1 = models
+
+        idx_res_dict = interpolate_linear(model_0=model_0,
+                                          model_1=model_1,
+                                          score_fn=score_fn,
+                                          train_dataset=ds_generator.train_split,
+                                          interpolation_factors=interpolation_factors,
+                                          interpolation_on_train_data=interpolation_on_train_data,
+                                          other_datasets=other_datasets,
+                                          **interpolate_linear_kwargs)
+        res_dict[tuple(m_idxes)] = idx_res_dict
+        # convert result dict into more readable dataframe
+        idx_dataset_series, idx_distance_series = interpolation_result2series(idx_res_dict)
+        dataset_series.append(idx_dataset_series)
+        distance_series.append(idx_distance_series)
+
+    ret_val = res_dict
+    # create dataframes
+    if return_dataframe:
+        ind = pd.MultiIndex.from_product([[interpolation_name], [interpolation_seeds],
+                                          list(res_dict.keys())],
+                                         names=['jobs', 'seeds', 'model_idxes'])
+        datasets_df = pd.DataFrame(dataset_series, index=ind)
+        distances_df = None
+        if not distance_series[0] is None:
+            distances_df = pd.DataFrame(distance_series, index=ind)
+        ret_val = datasets_df, distances_df
+    return ret_val
+    # return res_dict, dataset_series, distance_series
+
+
+def interpolation_result2series(result_dict: Dict[str, Any]) -> Tuple[pd.Series, Optional[pd.Series]]:
+    ds_key = 'datasets'
+    dist_key = 'distances'
+
+    def ds_result2series(ds_result_dict: Dict[str, Any], interp_factors: np.ndarray) -> pd.Series:
+        instability_key = 'instability'
+        interp_sc_key = 'interpolation_scores'
+        interp_scores = np.array(ds_result_dict[interp_sc_key])
+        assert len(interp_factors) == len(interp_scores)
+        # create results dictionary with necessary values
+        res_dict = {alpha: interp_score for alpha, interp_score in zip(interp_factors, interp_scores)}
+        res_dict[instability_key] = ds_result_dict[instability_key]
+        # create index
+        interp_ind = np.full_like(interp_scores, interp_sc_key, dtype=object)
+        idx_tuples = list(zip(interp_ind, interp_factors))
+        idx_tuples.append((instability_key, None))
+        ind = pd.MultiIndex.from_tuples(idx_tuples, names=['score', 'alpha'])
+        return pd.Series(res_dict.values(), index=ind)
+
+    interp_factors = np.array(result_dict['interpolation_factors'])
+    ds_dict = result_dict[ds_key]
+    ds_series_dict = {ds_name: ds_result2series(ds_result, interp_factors) for ds_name, ds_result in ds_dict.items()}
+    dataset_series = pd.concat(ds_series_dict, names=[ds_key])
+
+    distances_series = None
+    if dist_key in result_dict:
+        distances_dict = result_dict[dist_key]
+        ind = pd.MultiIndex.from_arrays([distances_dict.keys()], names=[dist_key])
+        distances_series = pd.Series(distances_dict.values(), index=ind)
+
+    return dataset_series, distances_series
 
 
 def interpolate_linear(model_0: nn.Module,
@@ -26,7 +148,7 @@ def interpolate_linear(model_0: nn.Module,
                        interpolation_factors: torch.Tensor = torch.linspace(0.0, 1.0, 5),
                        dataloader_kwargs: Dict[str, Any] = {'batch_size': 256},
                        compute_model_distances: bool = True,
-                       interpolation_on_train_data: bool = False) -> Dict[str, Dict[str, float]]:
+                       interpolation_on_train_data: bool = False) -> Dict[str, Any]:
     """Interpolate linearly between two models. Evaluates the performance of each interpolated model on given datasets.
     
     Note:
@@ -53,19 +175,19 @@ def interpolate_linear(model_0: nn.Module,
         ValueError: If no eval datasets are given or the model architectures do not match.
 
     Returns:
-        Dict[str, Dict[str, float]]: Dictionary containing the results.
-                                     Example:
-                                        {'__weights': [0.0,
-                                                       1.0],
-                                         '_cosinesimilarity': 0.010202181525528431,
-                                         '_l2distance': 30.355226516723633,
-                                         'val': {'instability': -0.08413612842559814,
+        Dict[str, Any]: Dictionary containing the results.
+                        Example:
+                           {'datasets': {'val': {'instability': -0.1300981044769287,
                                                  'interpolation_scores': [0.974958598613739,
-                                                                          0.976451575756073]}}
+                                                                          0.9691435694694519,
+                                                                          0.976451575756073]}},
+                            'distances': {'cosinesimilarity': 0.010202181525528431,
+                                          'l2distance': 30.355226516723633},
+                            'interpolation_factors': [0.0, 0.25, 0.5, 0.75, 1.0]}
     """
-    get_device = lambda model: next(iter(model.parameters())).device
-    assert get_device(model_0) == get_device(model_1), f'Models to interpolate not on same device!'
-    device = get_device(model_0)
+    get_model_device = lambda model: next(iter(model.parameters())).device
+    assert get_model_device(model_0) == get_model_device(model_1), f'Models to interpolate not on same device!'
+    device = get_model_device(model_0)
     assert 'train' not in other_datasets, f'`train` is a reserved dataset name. Please rename this evaluation dataset.'
     assert interpolation_factors.dim() == 1, '`interpolation_factors` must be tensor of dimension 1.'
     bn_types = (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)
@@ -95,8 +217,10 @@ def interpolate_linear(model_0: nn.Module,
     eval_datasets = copy.copy(other_datasets)  # shallow copy
     if interpolation_on_train_data:
         eval_datasets['train'] = train_dataset  # reference only
-    res_dict = {ds_name: [] for ds_name in eval_datasets}
-    res_dict['__weights'] = interpolation_factors.tolist()
+    ds_dict = {ds_name: [] for ds_name in eval_datasets}
+
+    res_dict = {}
+    res_dict['interpolation_factors'] = interpolation_factors.tolist()
 
     # create eval_dataloaders
     eval_dataloaders = {ds_name: data.DataLoader(ds, **dataloader_kwargs) for ds_name, ds in eval_datasets.items()}
@@ -129,15 +253,17 @@ def interpolate_linear(model_0: nn.Module,
         # eval on eval_datasets
         for ds_name, dataloader in eval_dataloaders.items():
             score = eval_loop(model=interp_model, dataloader=dataloader, score_fn=score_fn)
-            res_dict[ds_name].append(score)
+            ds_dict[ds_name].append(score)
 
     if compute_model_distances:
         vec_0 = nn.utils.parameters_to_vector(model_0.parameters())
         vec_1 = nn.utils.parameters_to_vector(model_1.parameters())
+        distances = {}
         # L2 distance
-        res_dict['_l2distance'] = torch.linalg.norm(vec_1 - vec_0).item()
+        distances['l2distance'] = torch.linalg.norm(vec_1 - vec_0).item()
         # cosine similarity
-        res_dict['_cosinesimilarity'] = nn.functional.cosine_similarity(vec_0, vec_1, dim=0).item()
+        distances['cosinesimilarity'] = nn.functional.cosine_similarity(vec_0, vec_1, dim=0).item()
+        res_dict['distances'] = distances
 
     # compute instability value
     # find weight indices for base models
@@ -164,9 +290,10 @@ def interpolate_linear(model_0: nn.Module,
         else:
             return float('nan')
 
-    for k, v in res_dict.items():
-        if not k.startswith('_'):
-            # k is ds_name, v is interpolation_scores
-            res_dict[k] = {'instability': compute_instability(v), 'interpolation_scores': v}
+    for k, v in ds_dict.items():
+        # k is ds_name, v is interpolation_scores
+        ds_dict[k] = {'instability': compute_instability(v), 'interpolation_scores': v}
+
+    res_dict['datasets'] = ds_dict
 
     return res_dict
