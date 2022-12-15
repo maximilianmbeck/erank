@@ -39,7 +39,26 @@ def interpolate_linear_runs(
         interpolate_linear_kwargs: Dict[str, Any] = {},
         device: Union[torch.device, str, int] = 'auto',
         return_dataframe: bool = True) -> Union[Dict[str, Any], Tuple[pd.DataFrame, Optional[pd.DataFrame]]]:
+    """Interpolate linearly between models of two runs. 
 
+    Args:
+        run_0 (JobResult): Run 0.
+        run_1 (JobResult): Run 1.
+        score_fn (Union[nn.Module, Metric]): Performance measure for the models.
+        model_idx (Union[int, List[int]], optional): The model index/indices used for linear interpolation. Defaults to -1.
+                                                     If -1, use the respective best model.
+        interpolation_factors (torch.Tensor, optional): Interpolation factors. Defaults to torch.linspace(0.0, 1.0, 5).
+        interpolation_on_train_data (bool, optional): Do linear interpolation on training data, too. Defaults to True.
+        interpolate_linear_kwargs (Dict[str, Any], optional): Some further keyword arguments for `interpolate_linear`. Defaults to {}.
+        device (Union[torch.device, str, int], optional): Device for linear interpolation. Defaults to 'auto'.
+        return_dataframe (bool, optional): If true, return results as dataframes. Return a dictionary otherwise. Defaults to True.
+
+    Raises:
+        ValueError: If a model index is missing in one of the two runs.
+
+    Returns:
+        Union[Dict[str, Any], Tuple[pd.DataFrame, Optional[pd.DataFrame]]]: Results as dataframes or a single dictionary.
+    """
     device = get_device(device)
     if isinstance(model_idx, int):
         model_idx = [model_idx]
@@ -97,7 +116,7 @@ def interpolate_linear_runs(
     if return_dataframe:
         ind = pd.MultiIndex.from_product([[interpolation_name], [interpolation_seeds],
                                           list(res_dict.keys())],
-                                         names=['jobs', 'seeds', 'model_idxes'])
+                                         names=['job', 'seeds', 'model_idxes'])
         datasets_df = pd.DataFrame(dataset_series, index=ind)
         distances_df = None
         if not distance_series[0] is None:
