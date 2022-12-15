@@ -9,7 +9,7 @@ from torchmetrics import Metric
 import torch.utils.data as data
 from tqdm import tqdm
 
-from ml_utilities.output_loader.job_output import JobResult
+from ml_utilities.output_loader.job_output import JobResult, SweepResult
 from ml_utilities.utils import get_device, hyp_param_cfg_to_str
 from ml_utilities.run_utils.run_handler import EXP_NAME_DIVIDER
 from erank.data.datasetgenerator import DatasetGenerator
@@ -17,7 +17,15 @@ from erank.data.datasetgenerator import DatasetGenerator
 
 class InstabilityAnalyzer:
 
-    def __init__(self, run_0: JobResult, run_1: JobResult):
+    def __init__(self,
+                 instability_sweep: Union[SweepResult, str],
+                 init_model_idx_param_k: str = 'trainer.init_model_step',
+                 device: str = 'auto',
+                 save_results_to_disk: bool = True,
+                 num_seed_combinations: int = 1, 
+                 init_model_idxes_range: Union[List[int], int] = -1, # -1 use best only, 0 use all available, > 0 try interval, list: use subset
+                 train_model_idxes_range: Union[List[int], int] = -1, # -1 use best model only, 0 use all available, > 0 try interval, list: use subset
+                 ):
         # setup all variables for linear interpolation
         # [check if runs are successful]
 
@@ -27,6 +35,8 @@ class InstabilityAnalyzer:
 
     def interpolate(self):
         pass
+
+
 
 
 def interpolate_linear_runs(
