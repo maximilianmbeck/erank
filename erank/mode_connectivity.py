@@ -1,7 +1,9 @@
 from typing import Any, Dict, List, Optional, Tuple, Union
 import sys
+import logging
 import copy
 import torch
+import itertools
 import pandas as pd
 import numpy as np
 from torch import nn
@@ -9,34 +11,66 @@ from torchmetrics import Metric
 import torch.utils.data as data
 from tqdm import tqdm
 
+from ml_utilities.runner import Runner
 from ml_utilities.output_loader.job_output import JobResult, SweepResult
 from ml_utilities.utils import get_device, hyp_param_cfg_to_str
 from ml_utilities.run_utils.run_handler import EXP_NAME_DIVIDER
 from erank.data.datasetgenerator import DatasetGenerator
 
+LOGGER = logging.getLogger(__name__)
 
-class InstabilityAnalyzer:
+class InstabilityAnalyzer(Runner):
 
     def __init__(self,
                  instability_sweep: Union[SweepResult, str],
-                 init_model_idx_param_k: str = 'trainer.init_model_step',
+                 init_model_idx_k_param_name: str = 'trainer.init_model_step',
                  device: str = 'auto',
-                 save_results_to_disk: bool = True,
+                 save_results_to_disc: bool = True,
                  num_seed_combinations: int = 1, 
-                 init_model_idxes_range: Union[List[int], int] = -1, # -1 use best only, 0 use all available, > 0 try interval, list: use subset
-                 train_model_idxes_range: Union[List[int], int] = -1, # -1 use best model only, 0 use all available, > 0 try interval, list: use subset
+                 init_model_idxes_or_interval: Union[List[int], int] = 0, # 0 use all available, > 0 try interval, list: use subset
+                 train_model_idxes_or_interval: Union[List[int], int] = -1, # -1 use best model only, 0 use all available, > 0 try interval, list: use subset
                  ):
-        # setup all variables for linear interpolation
-        # [check if runs are successful]
+        
+        self.instability_sweep = instability_sweep
+        self.device = get_device(device)
+        self._init_model_idxes_range = init_model_idxes_or_interval
+        self._train_model_idxes_range = train_model_idxes_or_interval
+        self._save_results_to_disc = save_results_to_disc       
+        self._init_model_idx_k_param_name = init_model_idx_k_param_name
+        
+        LOGGER.info('Loading variables from sweep.')
 
-        # check if runs are compatible (e.g. same architecture)
+        # get k parameter values from sweep
+        k_param_values = self.instability_sweep.get_sweep_param_values(self._init_model_idx_k_param_name)
+        if isinstance(k_param_values, dict):
+            if len(dict) == 0:
+                raise ValueError(f'No hyperparameter found for k parameter name: `{self._init_model_idx_k_param_name}`') 
+            else:
+                raise ValueError(f'Multiple hyperparemeters found for k parameter name: `{self._init_model_idx_k_param_name}` - Specify further!')
+        
+        # parameter specifying the rewind point / number of pretraining steps/epochs
+        self._all_idx_k_param_values = k_param_values
+        
+        # find seed combinations
+        sweep_seeds = self.instability_sweep.get_sweep_param_values('seed')
+        if len(sweep_seeds) < 2:
+            raise ValueError('Sweep contains less than 2 seeds!')
+        available_seed_combinations = list(itertools.combinations(sweep_seeds, 2))
+        seed_combinations = available_seed_combinations[:num_seed_combinations]
+        if len(available_seed_combinations) < num_seed_combinations:
+            LOGGER.warning(f'Only {len(available_seed_combinations)} seed combinations available, but {num_seed_combinations} were specified.\nUsing all available combinations now.')
+        self.seed_combination = seed_combinations
+        
+        # find subset of parameter values
+        # if init_model_idxes_range < 0:
+        #     k_param_values_subset = []
 
+
+    def do_instability_analysis(self):
         pass
 
-    def interpolate(self):
+    def run(self) -> None:
         pass
-
-
 
 
 def interpolate_linear_runs(
