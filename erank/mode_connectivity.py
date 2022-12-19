@@ -20,7 +20,9 @@ from erank.data.datasetgenerator import DatasetGenerator
 
 LOGGER = logging.getLogger(__name__)
 
+FN_INSTABILITY_ANALYSIS_FOLDER = 'instability_analysis'
 PARAM_NAME_INIT_MODEL_IDX_K = 'init_model_idx_k'
+
 
 class InstabilityAnalyzer(Runner):
 
@@ -38,7 +40,7 @@ class InstabilityAnalyzer(Runner):
                                                 int] = 0,  # 0 use all available, > 0 every nth, list: use subset
             train_model_idxes: List[int] = [-1],  # -1 use best model only, list: use subset
     ):
-        
+
         if isinstance(instability_sweep, str):
             instability_sweep = SweepResult(sweep_dir=instability_sweep)
         self.instability_sweep = instability_sweep
@@ -117,13 +119,20 @@ class InstabilityAnalyzer(Runner):
         _ = sweep_params.pop(self._init_model_idx_k_param_name)
         return sweep_params
 
-    def do_instability_analysis(self, hypparam_sel: Dict[str, Any] = {}) -> Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
+    def instability_analysis_for_hpparam(self,
+                                         hypparam_sel: Dict[str, Any] = {},
+                                         verbose: bool = True) -> Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
         # create run_dict: init_model_idx_k_param_value -> runs with different seeds
         run_dict = self._create_run_dict(hypparam_sel=hypparam_sel)
 
         dataset_dfs, distance_dfs = {}, {}
+        it = run_dict.items()
+        if verbose:
+            it = tqdm(it, file=sys.stdout)
         # iterate over run_dict and do interpolation for seed_combinations and train_model_idxes
-        for init_model_idx_k, k_dict in run_dict.items():
+        for init_model_idx_k, k_dict in it:
+            if isinstance(it, tqdm):
+                it.set_description_str(desc=f'init_model_idx_k={init_model_idx_k}')
             # for every init_model_idx_k_param_value, there must be jobs with all used seeds.
             assert set(self._used_seeds).issubset(set(k_dict.keys())), 'Some seeds are missing!'
 
@@ -169,8 +178,11 @@ class InstabilityAnalyzer(Runner):
 
         return run_dict
 
-    def run(self) -> None:
+    def instability_analysis(self) -> None:
         pass
+
+    def run(self) -> None:
+        self.instability_analysis()
 
 
 def interpolate_linear_runs(
@@ -308,7 +320,7 @@ def interpolate_linear(model_0: nn.Module,
                        interpolation_factors: torch.Tensor = torch.linspace(0.0, 1.0, 5),
                        dataloader_kwargs: Dict[str, Any] = {'batch_size': 256},
                        compute_model_distances: bool = True,
-                       interpolation_on_train_data: bool = True, 
+                       interpolation_on_train_data: bool = True,
                        tqdm_desc: str = 'Alphas') -> Dict[str, Any]:
     """Interpolate linearly between two models. Evaluates the performance of each interpolated model on given datasets.
     
@@ -392,9 +404,9 @@ def interpolate_linear(model_0: nn.Module,
 
     interpolation_factors = interpolation_factors.to(device)
     score_fn = score_fn.to(device)
-    if tqdm_desc: 
+    if tqdm_desc:
         it = tqdm(interpolation_factors, desc=tqdm_desc, file=sys.stdout)
-    else: 
+    else:
         it = interpolation_factors
     # alpha = interpolation factor
     for alpha in it:

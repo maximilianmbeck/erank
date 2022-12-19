@@ -1,0 +1,16 @@
+
+
+config:
+
+  run_script_name: instability_analyzer
+  run_script_kwargs:
+    instability_sweep: /system/user/publicwork/beck/projects/regularization/erank/outputs/mnist-11.7.3-lenet_rottasks_ft--221125_123651
+    score_fn: TAccuracy
+    interpolation_factors: [0.0000, 0.2500, 0.5000, 0.7500, 1.0000]
+    init_model_idxes_ks_or_every: 10
+    train_model_idxes: [-1]
+    interpolate_linear_kwargs: 
+      interpolation_on_train_data: False
+      dataloader_kwargs:
+        batch_size: 1024
+      compute_model_distances: True
