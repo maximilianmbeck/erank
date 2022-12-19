@@ -14,60 +14,160 @@ from tqdm import tqdm
 from ml_utilities.runner import Runner
 from ml_utilities.output_loader.job_output import JobResult, SweepResult
 from ml_utilities.utils import get_device, hyp_param_cfg_to_str
+from ml_utilities.torch_utils.metrics import get_metric, TAccuracy
 from ml_utilities.run_utils.run_handler import EXP_NAME_DIVIDER
 from erank.data.datasetgenerator import DatasetGenerator
 
 LOGGER = logging.getLogger(__name__)
 
+PARAM_NAME_INIT_MODEL_IDX_K = 'init_model_idx_k'
+
 class InstabilityAnalyzer(Runner):
 
-    def __init__(self,
-                 instability_sweep: Union[SweepResult, str],
-                 init_model_idx_k_param_name: str = 'trainer.init_model_step',
-                 device: str = 'auto',
-                 save_results_to_disc: bool = True,
-                 num_seed_combinations: int = 1, 
-                 init_model_idxes_or_interval: Union[List[int], int] = 0, # 0 use all available, > 0 try interval, list: use subset
-                 train_model_idxes_or_interval: Union[List[int], int] = -1, # -1 use best model only, 0 use all available, > 0 try interval, list: use subset
-                 ):
+    def __init__(
+            self,
+            instability_sweep: Union[SweepResult, str],
+            score_fn: Union[nn.Module, Metric, str] = TAccuracy(),
+            interpolation_factors: List[float] = list(torch.linspace(0.0, 1.0, 5)),
+            interpolate_linear_kwargs: Dict[str, Any] = {},
+            init_model_idx_k_param_name: str = 'trainer.init_model_step',
+            device: str = 'auto',
+            save_results_to_disc: bool = True,
+            num_seed_combinations: int = 1,
+            init_model_idxes_ks_or_every: Union[List[int],
+                                                int] = 0,  # 0 use all available, > 0 every nth, list: use subset
+            train_model_idxes: List[int] = [-1],  # -1 use best model only, list: use subset
+    ):
         
+        if isinstance(instability_sweep, str):
+            instability_sweep = SweepResult(sweep_dir=instability_sweep)
         self.instability_sweep = instability_sweep
         self.device = get_device(device)
-        self._init_model_idxes_range = init_model_idxes_or_interval
-        self._train_model_idxes_range = train_model_idxes_or_interval
-        self._save_results_to_disc = save_results_to_disc       
-        self._init_model_idx_k_param_name = init_model_idx_k_param_name
-        
+        self._save_results_to_disc = save_results_to_disc
+
         LOGGER.info('Loading variables from sweep.')
 
-        # get k parameter values from sweep
-        k_param_values = self.instability_sweep.get_sweep_param_values(self._init_model_idx_k_param_name)
-        if isinstance(k_param_values, dict):
-            if len(dict) == 0:
-                raise ValueError(f'No hyperparameter found for k parameter name: `{self._init_model_idx_k_param_name}`') 
+        #* get k parameter (init_model_idx) values from sweep
+        k_param_values = self.instability_sweep.get_sweep_param_values(init_model_idx_k_param_name)
+        if len(k_param_values) == 0:
+            raise ValueError(f'No hyperparameter found for k parameter name: `{self._init_model_idx_k_param_name}`')
+
+        if len(k_param_values) > 1:
+            raise ValueError(
+                f'Multiple hyperparemeters found for k parameter name: `{self._init_model_idx_k_param_name}` - Specify further!'
+            )
+
+        self._init_model_idx_k_param_name = list(k_param_values.keys())[0]
+        k_param_values = list(k_param_values.values())[0]
+
+        #* parameter specifying the rewind point / number of pretraining steps/epochs
+        self._all_init_idx_k_param_values = k_param_values
+        # find subset of parameter values
+        if isinstance(init_model_idxes_ks_or_every, int):
+            if init_model_idxes_ks_or_every > 0:
+                self._subset_init_idx_k_param_values = self._all_init_idx_k_param_values[::init_model_idxes_ks_or_every]
             else:
-                raise ValueError(f'Multiple hyperparemeters found for k parameter name: `{self._init_model_idx_k_param_name}` - Specify further!')
-        
-        # parameter specifying the rewind point / number of pretraining steps/epochs
-        self._all_idx_k_param_values = k_param_values
-        
-        # find seed combinations
-        sweep_seeds = self.instability_sweep.get_sweep_param_values('seed')
+                self._subset_init_idx_k_param_values = self._all_init_idx_k_param_values
+        elif isinstance(init_model_idxes_ks_or_every, list):
+            self._subset_init_idx_k_param_values = np.array(
+                self._all_init_idx_k_param_values)[init_model_idxes_ks_or_every].tolist()
+        else:
+            raise ValueError(
+                f'Unsupported type `{type(init_model_idxes_ks_or_every)}` for `init_model_idxes_or_every`.')
+
+        #* model indices for finetuned models
+        self._train_model_idxes = train_model_idxes
+
+        #* find seed combinations
+        sweep_seeds = list(self.instability_sweep.get_sweep_param_values('seed').values())[0]
         if len(sweep_seeds) < 2:
             raise ValueError('Sweep contains less than 2 seeds!')
         available_seed_combinations = list(itertools.combinations(sweep_seeds, 2))
         seed_combinations = available_seed_combinations[:num_seed_combinations]
         if len(available_seed_combinations) < num_seed_combinations:
-            LOGGER.warning(f'Only {len(available_seed_combinations)} seed combinations available, but {num_seed_combinations} were specified.\nUsing all available combinations now.')
-        self.seed_combination = seed_combinations
-        
-        # find subset of parameter values
-        # if init_model_idxes_range < 0:
-        #     k_param_values_subset = []
+            LOGGER.warning(
+                f'Only {len(available_seed_combinations)} seed combinations available, but {num_seed_combinations} were specified.\nUsing all available combinations now.'
+            )
+        self.seed_combinations = seed_combinations
+        # used seeds
+        used_seeds = set()
+        for sc in self.seed_combinations:
+            used_seeds.add(sc[0])
+            used_seeds.add(sc[1])
+        self._used_seeds = list(used_seeds)
 
+        #* Linear interpolation specific parameters
+        if isinstance(score_fn, str):
+            _score_fn = get_metric(score_fn)
+        elif isinstance(score_fn, nn.Module):
+            _score_fn = score_fn
+        else:
+            raise ValueError('Unknown type for score_fn!')
+        self.score_fn = _score_fn
+        self.interpolation_factors = interpolation_factors
+        interp_lin_default_kwargs = {'tqdm_desc': ''}
+        interp_lin_default_kwargs.update(interpolate_linear_kwargs)
+        self._interpolate_linear_kwargs = interp_lin_default_kwargs
 
-    def do_instability_analysis(self):
-        pass
+    @property
+    def remaining_hyperparams(self) -> Dict[str, Any]:
+        sweep_params = self.instability_sweep.get_sweep_param_values()
+        # remove seed and k_param_name
+        _ = sweep_params.pop('seed')
+        _ = sweep_params.pop(self._init_model_idx_k_param_name)
+        return sweep_params
+
+    def do_instability_analysis(self, hypparam_sel: Dict[str, Any] = {}) -> Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
+        # create run_dict: init_model_idx_k_param_value -> runs with different seeds
+        run_dict = self._create_run_dict(hypparam_sel=hypparam_sel)
+
+        dataset_dfs, distance_dfs = {}, {}
+        # iterate over run_dict and do interpolation for seed_combinations and train_model_idxes
+        for init_model_idx_k, k_dict in run_dict.items():
+            # for every init_model_idx_k_param_value, there must be jobs with all used seeds.
+            assert set(self._used_seeds).issubset(set(k_dict.keys())), 'Some seeds are missing!'
+
+            k_runs = dataset_dfs.get(init_model_idx_k, None)
+            if k_runs is None:
+                dataset_dfs[init_model_idx_k] = []
+                distance_dfs[init_model_idx_k] = []
+
+            for sc in self.seed_combinations:
+                run_0, run_1 = k_dict[sc[0]], k_dict[sc[1]]
+                for train_model_idx in self._train_model_idxes:
+                    interp_res_ds_df, interp_result_dist_df = interpolate_linear_runs(
+                        run_0=run_0,
+                        run_1=run_1,
+                        score_fn=self.score_fn,
+                        model_idx=train_model_idx,
+                        interpolation_factors=torch.tensor(self.interpolation_factors),
+                        interpolate_linear_kwargs=self._interpolate_linear_kwargs,
+                        device=self.device,
+                        return_dataframe=True)
+                    dataset_dfs[init_model_idx_k].append(interp_res_ds_df)
+                    distance_dfs[init_model_idx_k].append(interp_result_dist_df)
+
+            # create a dataframe for every init_model_idx_k
+            dataset_dfs[init_model_idx_k] = pd.concat(dataset_dfs[init_model_idx_k])
+            distance_dfs[init_model_idx_k] = pd.concat(distance_dfs[init_model_idx_k])
+
+        # concatenate all dataframes
+        dataset_result_df = pd.concat(dataset_dfs, names=[PARAM_NAME_INIT_MODEL_IDX_K])
+        distance_result_dfs = pd.concat(distance_dfs, names=[PARAM_NAME_INIT_MODEL_IDX_K])
+        return dataset_result_df, distance_result_dfs
+
+    def _create_run_dict(self, hypparam_sel: Dict[str, Any] = {}) -> Dict[int, Dict[int, JobResult]]:
+        """Create a dictionary containing all runs for an instability analysis run."""
+        hp_sel = copy.deepcopy(hypparam_sel)
+        run_dict = {}
+        for k in self._subset_init_idx_k_param_values:
+            add_hp_sel = {self._init_model_idx_k_param_name: k, 'seed': self._used_seeds}
+            hp_sel.update(add_hp_sel)
+            _, jobs = self.instability_sweep.query_jobs(hp_sel)
+            k_dict = {job.seed: job for job in jobs}
+            run_dict[k] = k_dict
+
+        return run_dict
 
     def run(self) -> None:
         pass
@@ -79,7 +179,6 @@ def interpolate_linear_runs(
         score_fn: Union[nn.Module, Metric],
         model_idx: Union[int, List[int]] = -1,
         interpolation_factors: torch.Tensor = torch.linspace(0.0, 1.0, 5),
-        interpolation_on_train_data: bool = True,
         interpolate_linear_kwargs: Dict[str, Any] = {},
         device: Union[torch.device, str, int] = 'auto',
         return_dataframe: bool = True) -> Union[Dict[str, Any], Tuple[pd.DataFrame, Optional[pd.DataFrame]]]:
@@ -92,7 +191,6 @@ def interpolate_linear_runs(
         model_idx (Union[int, List[int]], optional): The model index/indices used for linear interpolation. Defaults to -1.
                                                      If -1, use the respective best model.
         interpolation_factors (torch.Tensor, optional): Interpolation factors. Defaults to torch.linspace(0.0, 1.0, 5).
-        interpolation_on_train_data (bool, optional): Do linear interpolation on training data, too. Defaults to True.
         interpolate_linear_kwargs (Dict[str, Any], optional): Some further keyword arguments for `interpolate_linear`. Defaults to {}.
         device (Union[torch.device, str, int], optional): Device for linear interpolation. Defaults to 'auto'.
         return_dataframe (bool, optional): If true, return results as dataframes. Return a dictionary otherwise. Defaults to True.
@@ -146,7 +244,6 @@ def interpolate_linear_runs(
                                           score_fn=score_fn,
                                           train_dataset=ds_generator.train_split,
                                           interpolation_factors=interpolation_factors,
-                                          interpolation_on_train_data=interpolation_on_train_data,
                                           other_datasets=other_datasets,
                                           **interpolate_linear_kwargs)
         res_dict[tuple(m_idxes)] = idx_res_dict
@@ -211,7 +308,8 @@ def interpolate_linear(model_0: nn.Module,
                        interpolation_factors: torch.Tensor = torch.linspace(0.0, 1.0, 5),
                        dataloader_kwargs: Dict[str, Any] = {'batch_size': 256},
                        compute_model_distances: bool = True,
-                       interpolation_on_train_data: bool = False) -> Dict[str, Any]:
+                       interpolation_on_train_data: bool = True, 
+                       tqdm_desc: str = 'Alphas') -> Dict[str, Any]:
     """Interpolate linearly between two models. Evaluates the performance of each interpolated model on given datasets.
     
     Note:
@@ -233,6 +331,7 @@ def interpolate_linear(model_0: nn.Module,
         dataloader_kwargs (Dict[str, Any], optional): Additional dataloader keyword arguments. Defaults to {'batch_size': 256}.
         compute_model_distances (bool, optional): Computes distance metrics on given models. Defaults to True.
         interpolation_on_train_data (bool, optional): Evaluates interpolation performance on train data too. Defaults to False.
+        tqdm_desc (str, optional): The description for the tqdm progress bar. If '', then no progress bar is displayed. Defaults to 'Alphas'.
 
     Raises:
         ValueError: If no eval datasets are given or the model architectures do not match.
@@ -293,8 +392,12 @@ def interpolate_linear(model_0: nn.Module,
 
     interpolation_factors = interpolation_factors.to(device)
     score_fn = score_fn.to(device)
+    if tqdm_desc: 
+        it = tqdm(interpolation_factors, desc=tqdm_desc, file=sys.stdout)
+    else: 
+        it = interpolation_factors
     # alpha = interpolation factor
-    for alpha in tqdm(interpolation_factors, desc=f'Interp. factors', file=sys.stdout):
+    for alpha in it:
         # create interpolated model in a memory friendly way (only use memory used for another model instance)
         interp_model = copy.deepcopy(model_0)
         interp_model_state_dict = interp_model.state_dict()
