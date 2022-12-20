@@ -6,16 +6,18 @@ import torch
 import itertools
 import pandas as pd
 import numpy as np
+import torch.utils.data as data
 from torch import nn
 from torchmetrics import Metric
-import torch.utils.data as data
 from tqdm import tqdm
+from omegaconf import DictConfig
 
 from ml_utilities.runner import Runner
 from ml_utilities.output_loader.job_output import JobResult, SweepResult
-from ml_utilities.utils import get_device, hyp_param_cfg_to_str
+from ml_utilities.utils import get_device, hyp_param_cfg_to_str, convert_listofdicts_to_dictoflists
 from ml_utilities.torch_utils.metrics import get_metric, TAccuracy
 from ml_utilities.run_utils.run_handler import EXP_NAME_DIVIDER
+from ml_utilities.run_utils.sweep import Sweeper
 from erank.data.datasetgenerator import DatasetGenerator
 
 LOGGER = logging.getLogger(__name__)
@@ -39,6 +41,7 @@ class InstabilityAnalyzer(Runner):
             init_model_idxes_ks_or_every: Union[List[int],
                                                 int] = 0,  # 0 use all available, > 0 every nth, list: use subset
             train_model_idxes: List[int] = [-1],  # -1 use best model only, list: use subset
+            hpparam_sweep: DictConfig = None,
     ):
 
         if isinstance(instability_sweep, str):
@@ -110,6 +113,12 @@ class InstabilityAnalyzer(Runner):
         interp_lin_default_kwargs = {'tqdm_desc': ''}
         interp_lin_default_kwargs.update(interpolate_linear_kwargs)
         self._interpolate_linear_kwargs = interp_lin_default_kwargs
+        
+        #* sweep hyperparameters
+        self._hpparam_sweep_cfg = hpparam_sweep
+
+        #* disc operations
+
 
     @property
     def remaining_hyperparams(self) -> Dict[str, Any]:
@@ -121,13 +130,13 @@ class InstabilityAnalyzer(Runner):
 
     def instability_analysis_for_hpparam(self,
                                          hypparam_sel: Dict[str, Any] = {},
-                                         verbose: bool = True) -> Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
+                                         use_tqdm: bool = True) -> Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
         # create run_dict: init_model_idx_k_param_value -> runs with different seeds
         run_dict = self._create_run_dict(hypparam_sel=hypparam_sel)
 
         dataset_dfs, distance_dfs = {}, {}
         it = run_dict.items()
-        if verbose:
+        if use_tqdm:
             it = tqdm(it, file=sys.stdout)
         # iterate over run_dict and do interpolation for seed_combinations and train_model_idxes
         for init_model_idx_k, k_dict in it:
@@ -178,12 +187,46 @@ class InstabilityAnalyzer(Runner):
 
         return run_dict
 
-    def instability_analysis(self) -> None:
-        pass
+    def instability_analysis(self, use_tqdm: bool = True) -> None:
+        
+        # TODO: drop init_model_idx_k_param_name axis from hpparam_sweep_cfg
+        # create sweep
+        sweep = Sweeper.create(sweep_config=self._hpparam_sweep_cfg)
+        hp_combinations = sweep.generate_sweep_parameter_combinations(flatten_hierarchical_dicts=True)
+        
+        # create multiindex
+        hp_lists = convert_listofdicts_to_dictoflists(hp_combinations)
+        # hp_names = [hp_name.split('.')[-1] for hp_name in hp_lists.keys()]
+        hp_names = list(hp_lists.keys())
+        index = pd.MultiIndex.from_arrays(list(hp_lists.values()), names=hp_names)
+        
+        # perform instability analysis
+        dataset_result_dfs = []
+        distance_result_dfs = []
+        it = hp_combinations
+        if use_tqdm:
+            it = tqdm(hp_combinations, file=sys.stdout, desc='HP combinations')
+        
+        for hp_sel in hp_combinations:
+            # TODO save intermediate results to disc
+            # TODO check if already there. if so, skip
+            ds_df, dist_df = self.instability_analysis_for_hpparam(hypparam_sel=hp_sel, use_tqdm=False)
+            dataset_result_dfs.append(ds_df)
+            distance_result_dfs.append(dist_df)
+        
+        # load intermediate dfs from disc
+
+
+        dataset_result_df = pd.concat(dataset_result_dfs, keys=index)
+        distance_result_df = pd.concat(distance_result_dfs, keys=index)
+        # TODO save results
+        return dataset_result_df, distance_result_df
+
 
     def run(self) -> None:
         self.instability_analysis()
 
+####
 
 def interpolate_linear_runs(
         run_0: JobResult,
