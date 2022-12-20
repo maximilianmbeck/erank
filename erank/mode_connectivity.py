@@ -1,22 +1,28 @@
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 import sys
 import logging
 import copy
 import torch
 import itertools
+import pickle
 import pandas as pd
 import numpy as np
 import torch.utils.data as data
 from torch import nn
 from torchmetrics import Metric
 from tqdm import tqdm
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
+from datetime import datetime
 
 from ml_utilities.runner import Runner
 from ml_utilities.output_loader.job_output import JobResult, SweepResult
-from ml_utilities.utils import get_device, hyp_param_cfg_to_str, convert_listofdicts_to_dictoflists
+from ml_utilities.time_utils import FORMAT_DATETIME_SHORT
+from ml_utilities.utils import get_device, hyp_param_cfg_to_str, convert_listofdicts_to_dictoflists, setup_logging
 from ml_utilities.torch_utils.metrics import get_metric, TAccuracy
 from ml_utilities.run_utils.run_handler import EXP_NAME_DIVIDER
+from ml_utilities.output_loader.repo import KEY_CFG_CREATED, KEY_CFG_UPDATED, FORMAT_CFG_DATETIME
+
 from ml_utilities.run_utils.sweep import Sweeper
 from erank.data.datasetgenerator import DatasetGenerator
 
@@ -27,22 +33,38 @@ PARAM_NAME_INIT_MODEL_IDX_K = 'init_model_idx_k'
 
 
 class InstabilityAnalyzer(Runner):
+    str_name = 'instability_analyzer'
+    save_readable_format = 'xlsx'
+    save_pickle_format = 'p'
+    fn_instability_analysis = FN_INSTABILITY_ANALYSIS_FOLDER
+    fn_hp_result_df = 'hp_result_dfs'
+    fn_hp_result_readable = f'hp_result_{save_readable_format}'
+    fn_combined_results = 'combined_results'
+    fn_config = 'config.yaml'
+    key_dataset_result_df = 'datasets'
+    key_distance_result_df = 'distances'
 
     def __init__(
-            self,
-            instability_sweep: Union[SweepResult, str],
-            score_fn: Union[nn.Module, Metric, str] = TAccuracy(),
-            interpolation_factors: List[float] = list(torch.linspace(0.0, 1.0, 5)),
-            interpolate_linear_kwargs: Dict[str, Any] = {},
-            init_model_idx_k_param_name: str = 'trainer.init_model_step',
-            device: str = 'auto',
-            save_results_to_disc: bool = True,
-            num_seed_combinations: int = 1,
-            init_model_idxes_ks_or_every: Union[List[int],
-                                                int] = 0,  # 0 use all available, > 0 every nth, list: use subset
-            train_model_idxes: List[int] = [-1],  # -1 use best model only, list: use subset
-            hpparam_sweep: DictConfig = None,
+        self,
+        instability_sweep: Union[SweepResult, str],
+        score_fn: Union[nn.Module, Metric, str] = TAccuracy(),
+        interpolation_factors: List[float] = list(torch.linspace(0.0, 1.0, 5)),
+        interpolate_linear_kwargs: Dict[str, Any] = {},
+        init_model_idx_k_param_name: str = 'trainer.init_model_step',
+        device: str = 'auto',
+        save_results_to_disc: bool = True,
+        num_seed_combinations: int = 1,
+        init_model_idxes_ks_or_every: Union[List[int], int] = 0,  # 0 use all available, > 0 every nth, list: use subset
+        train_model_idxes: List[int] = [-1],  # -1 use best model only, list: use subset
+        hpparam_sweep: DictConfig = None,
     ):
+        #* save call config
+        saved_args = copy.deepcopy(locals())
+        saved_args.pop('self')
+        config = OmegaConf.create(saved_args)
+
+        #* save start time
+        self._start_time = datetime.now()
 
         if isinstance(instability_sweep, str):
             instability_sweep = SweepResult(sweep_dir=instability_sweep)
@@ -50,8 +72,11 @@ class InstabilityAnalyzer(Runner):
         self.device = get_device(device)
         self._save_results_to_disc = save_results_to_disc
 
-        LOGGER.info('Loading variables from sweep.')
+        #* setup logging / folders etc.
+        self._setup(config)
+        LOGGER.info(f'Setup instability analysis with config: \n{OmegaConf.to_yaml(config)}')
 
+        LOGGER.info('Loading variables from sweep.')
         #* get k parameter (init_model_idx) values from sweep
         k_param_values = self.instability_sweep.get_sweep_param_values(init_model_idx_k_param_name)
         if len(k_param_values) == 0:
@@ -79,10 +104,12 @@ class InstabilityAnalyzer(Runner):
         else:
             raise ValueError(
                 f'Unsupported type `{type(init_model_idxes_ks_or_every)}` for `init_model_idxes_or_every`.')
+        LOGGER.info(f'Using init_model_idxes / k parameters: {self._subset_init_idx_k_param_values}')
 
         #* model indices for finetuned models
         self._train_model_idxes = train_model_idxes
 
+        LOGGER.info(f'Finding seed combinations..')
         #* find seed combinations
         sweep_seeds = list(self.instability_sweep.get_sweep_param_values('seed').values())[0]
         if len(sweep_seeds) < 2:
@@ -100,6 +127,7 @@ class InstabilityAnalyzer(Runner):
             used_seeds.add(sc[0])
             used_seeds.add(sc[1])
         self._used_seeds = list(used_seeds)
+        LOGGER.info(f'Using seed combinations: {self.seed_combinations}')
 
         #* Linear interpolation specific parameters
         if isinstance(score_fn, str):
@@ -113,12 +141,41 @@ class InstabilityAnalyzer(Runner):
         interp_lin_default_kwargs = {'tqdm_desc': ''}
         interp_lin_default_kwargs.update(interpolate_linear_kwargs)
         self._interpolate_linear_kwargs = interp_lin_default_kwargs
-        
+
         #* sweep hyperparameters
-        self._hpparam_sweep_cfg = hpparam_sweep
+        self._hpparam_sweep_cfg = hpparam_sweep  # TODO check if can be loaded from sweep as default
 
-        #* disc operations
+    def _setup(self, config: DictConfig) -> None:
+        self._hp_result_folder_df = self.directory / InstabilityAnalyzer.fn_hp_result_df
+        self._hp_result_folder_readable = self.directory / InstabilityAnalyzer.fn_hp_result_readable
+        self._combined_results_folder = self.directory / InstabilityAnalyzer.fn_combined_results
 
+        if self._save_results_to_disc:
+            from .scripts import KEY_RUN_SCRIPT_KWARGS, KEY_RUN_SCRIPT_NAME
+            self.directory.mkdir(parents=True, exist_ok=True)
+            # setup logging
+            logfile = self.directory / f'output--{self._start_time.strftime(FORMAT_DATETIME_SHORT)}.log'
+            setup_logging(logfile)
+
+            # create folders
+            self._hp_result_folder_df.mkdir(parents=False, exist_ok=True)
+            self._hp_result_folder_readable.mkdir(parents=False, exist_ok=True)
+            self._combined_results_folder.mkdir(parents=False, exist_ok=True)
+
+            # save / update config config
+            config_file = self.directory / InstabilityAnalyzer.fn_config
+            cfg = OmegaConf.create()
+            cfg[KEY_RUN_SCRIPT_NAME] = InstabilityAnalyzer.str_name
+            cfg[KEY_RUN_SCRIPT_KWARGS] = config
+            cfg[KEY_CFG_UPDATED] = self._start_time.strftime(FORMAT_CFG_DATETIME)
+
+            if config_file.exists():
+                existing_cfg = OmegaConf.load(config_file)
+                cfg_created = existing_cfg[KEY_CFG_CREATED]
+            else:
+                cfg_created = cfg[KEY_CFG_UPDATED]
+            cfg[KEY_CFG_CREATED] = cfg_created
+            OmegaConf.save(cfg, config_file)
 
     @property
     def remaining_hyperparams(self) -> Dict[str, Any]:
@@ -128,9 +185,30 @@ class InstabilityAnalyzer(Runner):
         _ = sweep_params.pop(self._init_model_idx_k_param_name)
         return sweep_params
 
+    @property
+    def directory(self) -> Path:
+        return self.instability_sweep.directory / InstabilityAnalyzer.fn_instability_analysis
+
+    @property
+    def hp_result_folder_df(self) -> Path:
+        return self._hp_result_folder_df
+
+    @property
+    def hp_result_folder_readable(self) -> Path:
+        return self._hp_result_folder_readable
+
+    @property
+    def combined_results_folder(self) -> Path:
+        return self._combined_results_folder
+
+    @property
+    def result_dfs(self) -> Dict[str, pd.DataFrame]:
+        # TODO load latest results
+        pass
+
     def instability_analysis_for_hpparam(self,
                                          hypparam_sel: Dict[str, Any] = {},
-                                         use_tqdm: bool = True) -> Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
+                                         use_tqdm: bool = True) -> Dict[str, pd.DataFrame]:
         # create run_dict: init_model_idx_k_param_value -> runs with different seeds
         run_dict = self._create_run_dict(hypparam_sel=hypparam_sel)
 
@@ -171,8 +249,12 @@ class InstabilityAnalyzer(Runner):
 
         # concatenate all dataframes
         dataset_result_df = pd.concat(dataset_dfs, names=[PARAM_NAME_INIT_MODEL_IDX_K])
-        distance_result_dfs = pd.concat(distance_dfs, names=[PARAM_NAME_INIT_MODEL_IDX_K])
-        return dataset_result_df, distance_result_dfs
+        # TODO check if compute model distances = TRUE
+        distance_result_df = pd.concat(distance_dfs, names=[PARAM_NAME_INIT_MODEL_IDX_K])
+        return {
+            InstabilityAnalyzer.key_dataset_result_df: dataset_result_df,
+            InstabilityAnalyzer.key_distance_result_df: distance_result_df
+        }
 
     def _create_run_dict(self, hypparam_sel: Dict[str, Any] = {}) -> Dict[int, Dict[int, JobResult]]:
         """Create a dictionary containing all runs for an instability analysis run."""
@@ -187,46 +269,94 @@ class InstabilityAnalyzer(Runner):
 
         return run_dict
 
-    def instability_analysis(self, use_tqdm: bool = True) -> None:
-        
+    def instability_analysis(self, use_tqdm: bool = True, override_files: bool = False) -> Dict[str, pd.DataFrame]:
+
         # TODO: drop init_model_idx_k_param_name axis from hpparam_sweep_cfg
+        LOGGER.info(f'Starting instability analysis..')
         # create sweep
         sweep = Sweeper.create(sweep_config=self._hpparam_sweep_cfg)
         hp_combinations = sweep.generate_sweep_parameter_combinations(flatten_hierarchical_dicts=True)
-        
+        hp_combinations_str = [hyp_param_cfg_to_str(hp) for hp in hp_combinations]
+        LOGGER.info(f'Number of hyperparameter combinations for instability analysis: {len(hp_combinations)}')
+
+        # perform instability analysis
+        dataset_result_dfs = []
+        distance_result_dfs = []
+        it = zip(hp_combinations, hp_combinations_str)
+        if use_tqdm:
+            it = tqdm(it, file=sys.stdout, desc='HP combinations')
+
+        for hp_sel, hp_str in it:
+            if self._hp_result_df_exists(hp_str) and not override_files:
+                LOGGER.info(f'Params `{hp_str}`: load&skip')
+                df_dict = self.load_instability_analysis_for_hpparam(hp_str)
+            else:
+                LOGGER.info(f'Params `{hp_str}`: compute')
+                df_dict = self.instability_analysis_for_hpparam(hypparam_sel=hp_sel, use_tqdm=False)
+                self._save_hp_result_dfs(df_dict, hp_str)
+
+            dataset_result_dfs.append(df_dict[InstabilityAnalyzer.key_dataset_result_df])
+            distance_result_dfs.append(df_dict[InstabilityAnalyzer.key_distance_result_df])
+
         # create multiindex
         hp_lists = convert_listofdicts_to_dictoflists(hp_combinations)
         # hp_names = [hp_name.split('.')[-1] for hp_name in hp_lists.keys()]
         hp_names = list(hp_lists.keys())
         index = pd.MultiIndex.from_arrays(list(hp_lists.values()), names=hp_names)
-        
-        # perform instability analysis
-        dataset_result_dfs = []
-        distance_result_dfs = []
-        it = hp_combinations
-        if use_tqdm:
-            it = tqdm(hp_combinations, file=sys.stdout, desc='HP combinations')
-        
-        for hp_sel in hp_combinations:
-            # TODO save intermediate results to disc
-            # TODO check if already there. if so, skip
-            ds_df, dist_df = self.instability_analysis_for_hpparam(hypparam_sel=hp_sel, use_tqdm=False)
-            dataset_result_dfs.append(ds_df)
-            distance_result_dfs.append(dist_df)
-        
-        # load intermediate dfs from disc
-
 
         dataset_result_df = pd.concat(dataset_result_dfs, keys=index)
         distance_result_df = pd.concat(distance_result_dfs, keys=index)
-        # TODO save results
-        return dataset_result_df, distance_result_df
 
+        combined_results = {
+            InstabilityAnalyzer.key_dataset_result_df: dataset_result_df,
+            InstabilityAnalyzer.key_distance_result_df: distance_result_df
+        }
+        combined_results_file = self._save_combined_result_dfs(combined_results)
+
+        LOGGER.info(f'Done. Combined results in file `{str(combined_results_file)}`.')
+
+        return combined_results
+
+    def load_instability_analysis_for_hpparam(self, hp_sel_str: str) -> Dict[str, pd.DataFrame]:
+        # hp_sel_str without file_ending
+        load_file = self.hp_result_folder_df / f'{hp_sel_str}.{InstabilityAnalyzer.save_pickle_format}'
+        with load_file.open(mode='rb') as f:
+            df_dict = pickle.load(f)
+        return df_dict
+
+    def _save_combined_result_dfs(self, dataframe_dict: Dict[str, pd.DataFrame]) -> Path:
+        fname = f'combined_result{EXP_NAME_DIVIDER}{self._start_time.strftime(FORMAT_DATETIME_SHORT)}'
+        pickle_file = self._save_df_dict_pickle(dataframe_dict, self.combined_results_folder, fname)
+        self._save_df_dict_readable(dataframe_dict, self.combined_results_folder, fname)
+        return pickle_file
+
+    def _save_hp_result_dfs(self, dataframe_dict: Dict[str, pd.DataFrame], hp_sel_str: str) -> Path:
+        pickle_file = self._save_df_dict_pickle(dataframe_dict, self.hp_result_folder_df, hp_sel_str)
+        self._save_df_dict_readable(dataframe_dict, self.hp_result_folder_readable, hp_sel_str)
+        return pickle_file
+
+    def _save_df_dict_pickle(self, dataframe_dict: Dict[str, pd.DataFrame], dir: Path, filename_wo_ending: str) -> Path:
+        save_file = dir / f'{filename_wo_ending}.{InstabilityAnalyzer.save_pickle_format}'
+        with save_file.open(mode='wb') as f:
+            pickle.dump(dataframe_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
+        return save_file
+
+    def _save_df_dict_readable(self, dataframe_dict: Dict[str, pd.DataFrame], dir: Path,
+                               filename_wo_ending: str) -> Path:
+        save_file = dir / f'{filename_wo_ending}.{InstabilityAnalyzer.save_readable_format}'
+        with pd.ExcelWriter(save_file) as excelwriter:
+            for df_name, df in dataframe_dict.items():
+                df.to_excel(excel_writer=excelwriter, sheet_name=df_name)
+        return save_file
+
+    def _hp_result_df_exists(self, hp_sel_str: str) -> bool:
+        return (self.hp_result_folder_df / f'{hp_sel_str}.{InstabilityAnalyzer.save_pickle_format}').exists()
 
     def run(self) -> None:
         self.instability_analysis()
 
 ####
+
 
 def interpolate_linear_runs(
         run_0: JobResult,

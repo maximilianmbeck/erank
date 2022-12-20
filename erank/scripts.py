@@ -6,7 +6,7 @@ from omegaconf import DictConfig
 KEY_RUN_SCRIPT_NAME = 'run_script_name'
 KEY_RUN_SCRIPT_KWARGS = 'run_script_kwargs'
 
-_runner_registry = {'instability_analyzer': InstabilityAnalyzer}
+_runner_registry = {InstabilityAnalyzer.str_name: InstabilityAnalyzer}
 
 def get_runner_script(run_script: str) -> Type[Runner]:
     if run_script in _runner_registry:

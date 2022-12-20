@@ -1,4 +1,6 @@
-
+defaults:
+- hydra: no_logging.yaml
+- _self_
 
 config:
 
