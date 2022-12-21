@@ -15,6 +15,8 @@ config:
       compute_model_distances: True
     override_files: True
     num_seed_combinations: 1
+    save_folder_suffix: 1
+    float_eps_query_job: 1e-3
     hpparam_sweep:
       type: grid
       axes:

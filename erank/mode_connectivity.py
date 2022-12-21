@@ -45,20 +45,22 @@ class InstabilityAnalyzer(Runner):
     key_distance_result_df = 'distances'
 
     def __init__(
-        self,
-        instability_sweep: Union[SweepResult, str],
-        score_fn: Union[nn.Module, Metric, str] = TAccuracy(),
-        interpolation_factors: List[float] = list(torch.linspace(0.0, 1.0, 5)),
-        interpolate_linear_kwargs: Dict[str, Any] = {},
-        init_model_idx_k_param_name: str = 'trainer.init_model_step',
-        device: str = 'auto',
-        save_results_to_disc: bool = True,
-        override_files: bool = False,
-        num_seed_combinations: int = 1,
-        init_model_idxes_ks_or_every: Union[List[int], int] = 0,  # 0 use all available, > 0 every nth, list: use subset
-        train_model_idxes: List[int] = [-1],  # -1 use best model only, list: use subset
-        hpparam_sweep: DictConfig = None,
-    ):
+            self,
+            instability_sweep: Union[SweepResult, str],
+            score_fn: Union[nn.Module, Metric, str] = TAccuracy(),
+            interpolation_factors: List[float] = list(torch.linspace(0.0, 1.0, 5)),
+            interpolate_linear_kwargs: Dict[str, Any] = {},
+            init_model_idx_k_param_name: str = 'trainer.init_model_step',
+            device: str = 'auto',
+            save_results_to_disc: bool = True,
+            override_files: bool = False,
+            num_seed_combinations: int = 1,
+            init_model_idxes_ks_or_every: Union[List[int],
+                                                int] = 0,  # 0 use all available, > 0 every nth, list: use subset
+            train_model_idxes: List[int] = [-1],  # -1 use best model only, list: use subset
+            hpparam_sweep: DictConfig = None,
+            save_folder_suffix: str = '', 
+            float_eps_query_job: float = 1e-3):
         #* save call config
         saved_args = copy.deepcopy(locals())
         saved_args.pop('self')
@@ -73,6 +75,11 @@ class InstabilityAnalyzer(Runner):
         self.device = get_device(device)
         self._save_results_to_disc = save_results_to_disc
         self._override_files = override_files
+        if save_folder_suffix == '':
+            self._save_folder_name = InstabilityAnalyzer.fn_instability_analysis
+        else:
+            self._save_folder_name = f'{InstabilityAnalyzer.fn_instability_analysis}{EXP_NAME_DIVIDER}{self._save_folder_suffix}'
+        self._float_eps_query_job = float_eps_query_job
 
         #* setup logging / folders etc.
         self._setup(config)
@@ -189,7 +196,7 @@ class InstabilityAnalyzer(Runner):
 
     @property
     def directory(self) -> Path:
-        return self.instability_sweep.directory / InstabilityAnalyzer.fn_instability_analysis
+        return self.instability_sweep.directory / self._save_folder_name
 
     @property
     def hp_result_folder_df(self) -> Path:
@@ -210,9 +217,11 @@ class InstabilityAnalyzer(Runner):
 
     def instability_analysis_for_hpparam(self,
                                          hypparam_sel: Dict[str, Any] = {},
-                                         use_tqdm: bool = True) -> Dict[str, pd.DataFrame]:
+                                         use_tqdm: bool = True, 
+                                         float_eps: float = None) -> Dict[str, pd.DataFrame]:
         # create run_dict: init_model_idx_k_param_value -> runs with different seeds
-        run_dict = self._create_run_dict(hypparam_sel=hypparam_sel)
+        f_eps = self._float_eps_query_job if float_eps is None else float_eps
+        run_dict = self._create_run_dict(hypparam_sel=hypparam_sel, float_eps=f_eps)
 
         dataset_dfs, distance_dfs = {}, {}
         it = run_dict.items()
@@ -223,7 +232,8 @@ class InstabilityAnalyzer(Runner):
             if isinstance(it, tqdm):
                 it.set_description_str(desc=f'init_model_idx_k={init_model_idx_k}')
             # for every init_model_idx_k_param_value, there must be jobs with all used seeds.
-            assert set(self._used_seeds).issubset(set(k_dict.keys())), 'Some seeds are missing!'
+            assert set(self._used_seeds).issubset(set(
+                k_dict.keys())), f'Some seeds are missing for hyperparameter selection: {hypparam_sel}'
 
             k_runs = dataset_dfs.get(init_model_idx_k, None)
             if k_runs is None:
@@ -262,14 +272,14 @@ class InstabilityAnalyzer(Runner):
 
         return combined_results
 
-    def _create_run_dict(self, hypparam_sel: Dict[str, Any] = {}) -> Dict[int, Dict[int, JobResult]]:
+    def _create_run_dict(self, hypparam_sel: Dict[str, Any] = {}, float_eps: float = 1e-3) -> Dict[int, Dict[int, JobResult]]:
         """Create a dictionary containing all runs for an instability analysis run."""
         hp_sel = copy.deepcopy(hypparam_sel)
         run_dict = {}
         for k in self._subset_init_idx_k_param_values:
             add_hp_sel = {self._init_model_idx_k_param_name: k, 'seed': self._used_seeds}
             hp_sel.update(add_hp_sel)
-            _, jobs = self.instability_sweep.query_jobs(hp_sel)
+            _, jobs = self.instability_sweep.query_jobs(hp_sel, float_eps=float_eps)
             k_dict = {job.seed: job for job in jobs}
             run_dict[k] = k_dict
 
