@@ -58,9 +58,9 @@ class InstabilityAnalyzer(Runner):
             init_model_idxes_ks_or_every: Union[List[int],
                                                 int] = 0,  # 0 use all available, > 0 every nth, list: use subset
             train_model_idxes: List[int] = [-1],  # -1 use best model only, list: use subset
-            hpparam_sweep: DictConfig = None,
             save_folder_suffix: str = '', 
-            float_eps_query_job: float = 1e-3):
+            float_eps_query_job: float = 1e-3,
+            hpparam_sweep: DictConfig = None):
         #* save call config
         saved_args = copy.deepcopy(locals())
         saved_args.pop('self')
@@ -152,7 +152,9 @@ class InstabilityAnalyzer(Runner):
         self._interpolate_linear_kwargs = interp_lin_default_kwargs
 
         #* sweep hyperparameters
-        self._hpparam_sweep_cfg = hpparam_sweep  # TODO check if can be loaded from sweep as default
+        if hpparam_sweep is None:
+            hpparam_sweep = self.instability_sweep.sweep_cfg
+        self._hpparam_sweep_cfg = hpparam_sweep
 
     def _setup(self, config: DictConfig) -> None:
         self._hp_result_folder_df = self.directory / InstabilityAnalyzer.fn_hp_result_df
@@ -290,7 +292,8 @@ class InstabilityAnalyzer(Runner):
         # TODO: drop init_model_idx_k_param_name axis from hpparam_sweep_cfg
         LOGGER.info(f'Starting instability analysis..')
         # create sweep
-        sweep = Sweeper.create(sweep_config=self._hpparam_sweep_cfg)
+        sweep = Sweeper.create(sweep_config=copy.deepcopy(self._hpparam_sweep_cfg))
+        sweep.drop_axes(ax_param_names=[self._init_model_idx_k_param_name, 'experiment_data.seed'])
         hp_combinations = sweep.generate_sweep_parameter_combinations(flatten_hierarchical_dicts=True)
         hp_combinations_str = [hyp_param_cfg_to_str(hp) for hp in hp_combinations]
         LOGGER.info(f'Number of hyperparameter combinations for instability analysis: {len(hp_combinations)}')
