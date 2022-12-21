@@ -41,6 +41,7 @@ class DatasetGenerator(DatasetGeneratorInterface):
         self.dataset_split = dataset_split
         self._train_split = None
         self._val_split = None
+        self._dataset_generated = False
 
     def generate_dataset(self) -> None:
         LOGGER.info(f'Generating dataset: {self.dataset}')
@@ -49,6 +50,11 @@ class DatasetGenerator(DatasetGeneratorInterface):
         self._val_split = dataset
         if self.dataset_split:
             self._train_split, self._val_split = random_split_train_tasks(dataset=dataset, **self.dataset_split)
+        self._dataset_generated = True
+
+    @property
+    def dataset_generated(self) -> bool:
+        return self._dataset_generated
 
     @property
     def train_split(self) -> data.Dataset:

@@ -225,6 +225,13 @@ class InstabilityAnalyzer(Runner):
         f_eps = self._float_eps_query_job if float_eps is None else float_eps
         run_dict = self._create_run_dict(hypparam_sel=hypparam_sel, float_eps=f_eps)
 
+        # create dataset_generator and avoid reloading the dataset on every iteration
+        # Get any jobresult from the run_dict. They all have the same data config.
+        first_jobresult = list(list(run_dict.values())[0].values())[0]
+        data_cfg = first_jobresult.config.config.data
+        ds_generator = DatasetGenerator(**data_cfg)
+        ds_generator.generate_dataset()
+
         dataset_dfs, distance_dfs = {}, {}
         it = run_dict.items()
         if use_tqdm:
@@ -253,7 +260,8 @@ class InstabilityAnalyzer(Runner):
                         interpolation_factors=torch.tensor(self.interpolation_factors),
                         interpolate_linear_kwargs=self._interpolate_linear_kwargs,
                         device=self.device,
-                        return_dataframe=True)
+                        return_dataframe=True, 
+                        dataset_generator=ds_generator)
                     dataset_dfs[init_model_idx_k].append(interp_result_ds_df)
                     if not interp_result_dist_df is None:
                         distance_dfs[init_model_idx_k].append(interp_result_dist_df)
@@ -275,7 +283,12 @@ class InstabilityAnalyzer(Runner):
         return combined_results
 
     def _create_run_dict(self, hypparam_sel: Dict[str, Any] = {}, float_eps: float = 1e-3) -> Dict[int, Dict[int, JobResult]]:
-        """Create a dictionary containing all runs for an instability analysis run."""
+        """Create a dictionary containing all runs for an instability analysis run.
+
+        Returns:
+            Dict[int, Dict[int, JobResult]]: Dictionary with all runs necessary for instability analysis.
+                                             Hierarchy: init_model_idx_k -> seed -> jobresult
+        """
         hp_sel = copy.deepcopy(hypparam_sel)
         run_dict = {}
         for k in self._subset_init_idx_k_param_values:
@@ -311,7 +324,7 @@ class InstabilityAnalyzer(Runner):
                 df_dict = self.load_instability_analysis_for_hpparam(hp_str)
             else:
                 LOGGER.info(f'Params `{hp_str}`: compute')
-                df_dict = self.instability_analysis_for_hpparam(hypparam_sel=hp_sel, use_tqdm=False)
+                df_dict = self.instability_analysis_for_hpparam(hypparam_sel=hp_sel, use_tqdm=True)
                 self._save_hp_result_dfs(df_dict, hp_str)
 
             dataset_result_dfs.append(df_dict[InstabilityAnalyzer.key_dataset_result_df])
@@ -387,7 +400,8 @@ def interpolate_linear_runs(
         interpolation_factors: torch.Tensor = torch.linspace(0.0, 1.0, 5),
         interpolate_linear_kwargs: Dict[str, Any] = {},
         device: Union[torch.device, str, int] = 'auto',
-        return_dataframe: bool = True) -> Union[Dict[str, Any], Tuple[pd.DataFrame, Optional[pd.DataFrame]]]:
+        return_dataframe: bool = True,
+        dataset_generator: DatasetGenerator = None) -> Union[Dict[str, Any], Tuple[pd.DataFrame, Optional[pd.DataFrame]]]:
     """Interpolate linearly between models of two runs. 
 
     Args:
@@ -400,6 +414,9 @@ def interpolate_linear_runs(
         interpolate_linear_kwargs (Dict[str, Any], optional): Some further keyword arguments for `interpolate_linear`. Defaults to {}.
         device (Union[torch.device, str, int], optional): Device for linear interpolation. Defaults to 'auto'.
         return_dataframe (bool, optional): If true, return results as dataframes. Return a dictionary otherwise. Defaults to True.
+        dataset_generator (dataset_generator, optional): Use this dataset generator to access dataset. 
+                                                         For efficiency only, if this method is called multiple times. 
+                                                         If None, create dataset_generator from run_0's data config. Defaults to None.
 
     Raises:
         ValueError: If a model index is missing in one of the two runs.
@@ -415,10 +432,15 @@ def interpolate_linear_runs(
     interpolation_name = run_0.experiment_name + EXP_NAME_DIVIDER + hyp_param_cfg_to_str(run_0.override_hpparams)
     interpolation_seeds = (run_0.experiment_data.seed, run_1.experiment_data.seed)
 
-    # use dataset from run_0 for dataset setup
-    data_cfg = run_0.config.config.data
-    ds_generator = DatasetGenerator(**data_cfg)
-    ds_generator.generate_dataset()
+    if dataset_generator is None:
+        # use dataset from run_0 for dataset setup
+        data_cfg = run_0.config.config.data
+        ds_generator = DatasetGenerator(**data_cfg)
+        ds_generator.generate_dataset()
+    else:
+        ds_generator = dataset_generator
+        if not ds_generator.dataset_generated:
+            ds_generator.generate_dataset()
 
     other_datasets = {'val': ds_generator.val_split}
     if 'other_datasets' in interpolate_linear_kwargs:
