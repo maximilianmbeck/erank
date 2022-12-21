@@ -78,7 +78,7 @@ class InstabilityAnalyzer(Runner):
         if save_folder_suffix == '':
             self._save_folder_name = InstabilityAnalyzer.fn_instability_analysis
         else:
-            self._save_folder_name = f'{InstabilityAnalyzer.fn_instability_analysis}{EXP_NAME_DIVIDER}{self._save_folder_suffix}'
+            self._save_folder_name = f'{InstabilityAnalyzer.fn_instability_analysis}{EXP_NAME_DIVIDER}{save_folder_suffix}'
         self._float_eps_query_job = float_eps_query_job
 
         #* setup logging / folders etc.
