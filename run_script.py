@@ -1,20 +1,18 @@
 
 from pathlib import Path
-import hydra
 import logging
 from omegaconf import DictConfig, OmegaConf
-from hydra.core.hydra_config import HydraConfig
 from erank.scripts import ScriptRunner
+from ml_utilities.utils import get_config_file_from_cli, get_config
 LOGGER = logging.getLogger(__name__)
 
-
-@hydra.main(version_base=None, config_path='configs_scripts')
 def run_script(cfg: DictConfig):
     LOGGER.info(f'Running script with config: \n{OmegaConf.to_yaml(cfg)}')
     cfg = cfg.config
     script_runner = ScriptRunner(cfg)
     script_runner.run()
 
-
 if __name__=='__main__':
-    run_script()
+    cfg_file = get_config_file_from_cli(config_folder='configs_scripts', script_file=Path(__file__))
+    cfg = get_config(cfg_file)
+    run_script(cfg)

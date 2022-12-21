@@ -53,6 +53,7 @@ class InstabilityAnalyzer(Runner):
         init_model_idx_k_param_name: str = 'trainer.init_model_step',
         device: str = 'auto',
         save_results_to_disc: bool = True,
+        override_files: bool = False,
         num_seed_combinations: int = 1,
         init_model_idxes_ks_or_every: Union[List[int], int] = 0,  # 0 use all available, > 0 every nth, list: use subset
         train_model_idxes: List[int] = [-1],  # -1 use best model only, list: use subset
@@ -71,6 +72,7 @@ class InstabilityAnalyzer(Runner):
         self.instability_sweep = instability_sweep
         self.device = get_device(device)
         self._save_results_to_disc = save_results_to_disc
+        self._override_files = override_files
 
         #* setup logging / folders etc.
         self._setup(config)
@@ -231,7 +233,7 @@ class InstabilityAnalyzer(Runner):
             for sc in self.seed_combinations:
                 run_0, run_1 = k_dict[sc[0]], k_dict[sc[1]]
                 for train_model_idx in self._train_model_idxes:
-                    interp_res_ds_df, interp_result_dist_df = interpolate_linear_runs(
+                    interp_result_ds_df, interp_result_dist_df = interpolate_linear_runs(
                         run_0=run_0,
                         run_1=run_1,
                         score_fn=self.score_fn,
@@ -240,21 +242,25 @@ class InstabilityAnalyzer(Runner):
                         interpolate_linear_kwargs=self._interpolate_linear_kwargs,
                         device=self.device,
                         return_dataframe=True)
-                    dataset_dfs[init_model_idx_k].append(interp_res_ds_df)
-                    distance_dfs[init_model_idx_k].append(interp_result_dist_df)
+                    dataset_dfs[init_model_idx_k].append(interp_result_ds_df)
+                    if not interp_result_dist_df is None:
+                        distance_dfs[init_model_idx_k].append(interp_result_dist_df)
 
             # create a dataframe for every init_model_idx_k
             dataset_dfs[init_model_idx_k] = pd.concat(dataset_dfs[init_model_idx_k])
-            distance_dfs[init_model_idx_k] = pd.concat(distance_dfs[init_model_idx_k])
+            if distance_dfs[init_model_idx_k]:
+                distance_dfs[init_model_idx_k] = pd.concat(distance_dfs[init_model_idx_k])
 
         # concatenate all dataframes
         dataset_result_df = pd.concat(dataset_dfs, names=[PARAM_NAME_INIT_MODEL_IDX_K])
-        # TODO check if compute model distances = TRUE
-        distance_result_df = pd.concat(distance_dfs, names=[PARAM_NAME_INIT_MODEL_IDX_K])
-        return {
+        combined_results = {
             InstabilityAnalyzer.key_dataset_result_df: dataset_result_df,
-            InstabilityAnalyzer.key_distance_result_df: distance_result_df
         }
+        if len(list(distance_dfs.values())[0]) > 0:
+            distance_result_df = pd.concat(distance_dfs, names=[PARAM_NAME_INIT_MODEL_IDX_K])
+            combined_results[InstabilityAnalyzer.key_distance_result_df] = distance_result_df
+
+        return combined_results
 
     def _create_run_dict(self, hypparam_sel: Dict[str, Any] = {}) -> Dict[int, Dict[int, JobResult]]:
         """Create a dictionary containing all runs for an instability analysis run."""
@@ -282,12 +288,12 @@ class InstabilityAnalyzer(Runner):
         # perform instability analysis
         dataset_result_dfs = []
         distance_result_dfs = []
-        it = zip(hp_combinations, hp_combinations_str)
+        hps = list(zip(hp_combinations, hp_combinations_str))
         if use_tqdm:
-            it = tqdm(it, file=sys.stdout, desc='HP combinations')
+            hps = tqdm(hps, file=sys.stdout, desc='HP combinations')
 
-        for hp_sel, hp_str in it:
-            if self._hp_result_df_exists(hp_str) and not override_files:
+        for hp_sel, hp_str in hps:
+            if self._hp_result_df_exists(hp_str) and not (override_files or self._override_files):
                 LOGGER.info(f'Params `{hp_str}`: load&skip')
                 df_dict = self.load_instability_analysis_for_hpparam(hp_str)
             else:
@@ -296,7 +302,9 @@ class InstabilityAnalyzer(Runner):
                 self._save_hp_result_dfs(df_dict, hp_str)
 
             dataset_result_dfs.append(df_dict[InstabilityAnalyzer.key_dataset_result_df])
-            distance_result_dfs.append(df_dict[InstabilityAnalyzer.key_distance_result_df])
+            dist_df = df_dict.get(InstabilityAnalyzer.key_distance_result_df, None)
+            if not dist_df is None:
+                distance_result_dfs.append(dist_df)
 
         # create multiindex
         hp_lists = convert_listofdicts_to_dictoflists(hp_combinations)
@@ -305,15 +313,14 @@ class InstabilityAnalyzer(Runner):
         index = pd.MultiIndex.from_arrays(list(hp_lists.values()), names=hp_names)
 
         dataset_result_df = pd.concat(dataset_result_dfs, keys=index)
-        distance_result_df = pd.concat(distance_result_dfs, keys=index)
+        combined_results = {InstabilityAnalyzer.key_dataset_result_df: dataset_result_df}
+        if len(distance_result_dfs) > 0:
+            distance_result_df = pd.concat(distance_result_dfs, keys=index)
+            combined_results[InstabilityAnalyzer.key_distance_result_df] = distance_result_df
 
-        combined_results = {
-            InstabilityAnalyzer.key_dataset_result_df: dataset_result_df,
-            InstabilityAnalyzer.key_distance_result_df: distance_result_df
-        }
         combined_results_file = self._save_combined_result_dfs(combined_results)
 
-        LOGGER.info(f'Done. Combined results in file `{str(combined_results_file)}`.')
+        LOGGER.info(f'Done. \nCombined results in file `{str(combined_results_file)}`.')
 
         return combined_results
 
@@ -354,6 +361,7 @@ class InstabilityAnalyzer(Runner):
 
     def run(self) -> None:
         self.instability_analysis()
+
 
 ####
 
