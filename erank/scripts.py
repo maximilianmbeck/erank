@@ -2,7 +2,8 @@ from typing import Type
 from omegaconf import DictConfig
 
 from ml_utilities.runner import Runner
-from .mode_connectivity import InstabilityAnalyzer
+
+from .mode_connectivity.instability_analysis import InstabilityAnalyzer
 
 KEY_RUN_SCRIPT_NAME = 'run_script_name'
 KEY_RUN_SCRIPT_KWARGS = 'run_script_kwargs'
