@@ -44,23 +44,60 @@ class InstabilityAnalyzer(Runner):
     key_dataset_result_df = 'datasets'
     key_distance_result_df = 'distances'
 
-    def __init__(
-            self,
-            instability_sweep: Union[SweepResult, str],
-            score_fn: Union[nn.Module, Metric, str] = TAccuracy(),
-            interpolation_factors: List[float] = list(torch.linspace(0.0, 1.0, 5)),
-            interpolate_linear_kwargs: Dict[str, Any] = {},
-            init_model_idx_k_param_name: str = 'trainer.init_model_step',
-            device: str = 'auto',
-            save_results_to_disc: bool = True,
-            override_files: bool = False,
-            num_seed_combinations: int = 1,
-            init_model_idxes_ks_or_every: Union[List[int],
-                                                int] = 0,  # 0 use all available, > 0 every nth, list: use subset
-            train_model_idxes: List[int] = [-1],  # -1 use best model only, list: use subset
-            save_folder_suffix: str = '', 
-            float_eps_query_job: float = 1e-3,
-            hpparam_sweep: DictConfig = None):
+    def __init__(self,
+                 instability_sweep: Union[SweepResult, str],
+                 score_fn: Union[nn.Module, Metric, str] = TAccuracy(),
+                 interpolation_factors: List[float] = list(torch.linspace(0.0, 1.0, 5)),
+                 interpolate_linear_kwargs: Dict[str, Any] = {},
+                 init_model_idx_k_param_name: str = 'trainer.init_model_step',
+                 device: str = 'auto',
+                 save_results_to_disc: bool = True,
+                 override_files: bool = False,
+                 num_seed_combinations: int = 1,
+                 init_model_idxes_ks_or_every: Union[List[int], int] = 0,
+                 train_model_idxes: List[int] = [-1],
+                 save_folder_suffix: str = '',
+                 float_eps_query_job: float = 1e-3,
+                 hpparam_sweep: DictConfig = None):
+        """A class that performs instability analysis outlined in Frankle et al., 2020. 
+        Core of this analysis is the linear interpolatin of two models traind with different SGD noise from a varying number
+        of pretraining steps.
+
+        It takes a SweepResult or the path to the sweep results as input and performs the instability analysis on this sweep.
+        The sweep must contain a parameter (`init_model_idx_k_param_name`) that controls the number of pretrain steps on a model
+        and finetuning runs with at least two seeds. 
+
+        Note:
+            Also computes the instability value according to Frankle et al., 2020, p. 3.
+            Instability = max/min [interpolation_scores] - mean[interpolation_score(0.0), interpolation_score(1.0)]
+    
+        References:
+            Frankle, Jonathan, Gintare Karolina Dziugaite, Daniel M. Roy, and Michael Carbin. 2020. 
+                “Linear Mode Connectivity and the Lottery Ticket Hypothesis.” arXiv. http://arxiv.org/abs/1912.05671.
+
+        Args:
+            instability_sweep (Union[SweepResult, str]): The (path to the) sweep result.
+            score_fn (Union[nn.Module, Metric, str], optional): The score function for measuring model performance on the datasets. 
+                                                                Defaults to TAccuracy().
+            interpolation_factors (List[float], optional): List of interpolation factors. Defaults to list(torch.linspace(0.0, 1.0, 5)).
+            interpolate_linear_kwargs (Dict[str, Any], optional): Some keyword arguments for `interpolate_linear()`. Defaults to {}.
+            init_model_idx_k_param_name (str, optional): The parameter name that specifies the amount of pretraining in the sweep. 
+                                                         Defaults to 'trainer.init_model_step'.
+            device (str, optional): The device, e.g. the GPU id. Defaults to 'auto'.
+            save_results_to_disc (bool, optional): Save results and logging to disc. Defaults to True.
+            override_files (bool, optional): Override results for all hyperparameters, load existing results otherwise. Defaults to False.
+            num_seed_combinations (int, optional): Number of seed combinations for linear interpolation. Defaults to 1.
+            init_model_idxes_ks_or_every (Union[List[int], int], optional): A list of pretrain model indexes or an interval to use every j-th pretraining model index. 
+                                                                            If 0, use all available pretrain indexes. Defaults to 0.
+            train_model_idxes (List[int], optional): Perform linear interpolation between models with these finetuning indices from to runs
+                                                     with different seeds. Defaults to [-1].
+            save_folder_suffix (str, optional): Suffix for instability analysis result folder in sweep directory. Defaults to ''.
+            float_eps_query_job (float, optional): Epsilon for floating point hyperparameter value comparison. Defaults to 1e-3.
+            hpparam_sweep (DictConfig, optional): Sweep config producing the hyperparameters on which instability analysis should be performed.
+                                                  Can be used to provide a subset of hyperparameters to perform instability analysis on.
+                                                  If None, use sweep config from sweep result, i.e. perform instability analysis on all 
+                                                  hyperparameter combinations. Defaults to None.
+        """
         #* save call config
         saved_args = copy.deepcopy(locals())
         saved_args.pop('self')
@@ -190,6 +227,9 @@ class InstabilityAnalyzer(Runner):
 
     @property
     def remaining_hyperparams(self) -> Dict[str, Any]:
+        """The remaining hyperparameters of the sweep. 
+        These are the sweep hyperparameters without the hyperparameters necessary for the instability analysis, 
+        i.e. the init_model_idx_k_param_name and the seed."""
         sweep_params = self.instability_sweep.get_sweep_param_values()
         # remove seed and k_param_name
         _ = sweep_params.pop('seed')
@@ -198,29 +238,69 @@ class InstabilityAnalyzer(Runner):
 
     @property
     def directory(self) -> Path:
+        """The root directory of the instability analysis."""
         return self.instability_sweep.directory / self._save_folder_name
 
     @property
     def hp_result_folder_df(self) -> Path:
+        """Folder of single hyperparameter results in pickle format."""
         return self._hp_result_folder_df
 
     @property
     def hp_result_folder_readable(self) -> Path:
+        """Folder of single hyperparameter results in readable format."""
         return self._hp_result_folder_readable
 
     @property
     def combined_results_folder(self) -> Path:
+        """The (combined) results folder."""
         return self._combined_results_folder
 
     @property
-    def result_dfs(self) -> Dict[str, pd.DataFrame]:
-        # TODO load latest results
-        pass
+    def combined_results(self) -> List[str]:
+        """Return the names of combined results in ascending order (latest results last)."""
+        return sorted(
+            [p.stem for p in self.combined_results_folder.glob(f'*.{InstabilityAnalyzer.save_pickle_format}')],
+            reverse=False)
+
+    @property
+    def combined_results_dfs(self) -> Dict[str, pd.DataFrame]:
+        """The latest result dataframes."""
+        return self.get_combined_results_dfs(idx=-1)
+
+    def get_combined_results_dfs(self, idx: int = -1) -> Dict[str, pd.DataFrame]:
+        """Return a dictionary with all result tables (DataFrames).
+        List is sorted chronologically after creation time. See `combined_results`.
+
+        Args:
+            idx (int, optional): The index in the `combined_results` list. Defaults to -1.
+
+        Returns:
+            Dict[str, pd.DataFrame]: The combined results.
+        """
+        combined_result_name = self.combined_results[idx]
+        combined_result_file = self.combined_results_folder / f'{combined_result_name}.{InstabilityAnalyzer.save_pickle_format}'
+        with combined_result_file.open(mode='rb') as f:
+            combined_result_dfs = pickle.load(f)
+        return combined_result_dfs
 
     def instability_analysis_for_hpparam(self,
                                          hypparam_sel: Dict[str, Any] = {},
-                                         use_tqdm: bool = True, 
+                                         use_tqdm: bool = True,
                                          float_eps: float = None) -> Dict[str, pd.DataFrame]:
+        """Run the instability analysis for a single hyperparameter configuration.
+        Results will be stored separately, if configured.
+
+        Args:
+            hypparam_sel (Dict[str, Any], optional): The hyperparameter selection dictionary. 
+                                                     Keys are dot-separated hyperparameters. Defaults to {}.
+            use_tqdm (bool, optional): Show progress bar. Defaults to True.
+            float_eps (float, optional): Epsilon value for float hyperparameter value comparison for querying jobs from the sweep. 
+                                         If None use preconfigured value. Defaults to None.
+
+        Returns:
+            Dict[str, pd.DataFrame]: The result dataframes for this hyperparameter configuration.
+        """
         # create run_dict: init_model_idx_k_param_value -> runs with different seeds
         f_eps = self._float_eps_query_job if float_eps is None else float_eps
         run_dict = self._create_run_dict(hypparam_sel=hypparam_sel, float_eps=f_eps)
@@ -260,7 +340,7 @@ class InstabilityAnalyzer(Runner):
                         interpolation_factors=torch.tensor(self.interpolation_factors),
                         interpolate_linear_kwargs=self._interpolate_linear_kwargs,
                         device=self.device,
-                        return_dataframe=True, 
+                        return_dataframe=True,
                         dataset_generator=ds_generator)
                     dataset_dfs[init_model_idx_k].append(interp_result_ds_df)
                     if not interp_result_dist_df is None:
@@ -282,7 +362,9 @@ class InstabilityAnalyzer(Runner):
 
         return combined_results
 
-    def _create_run_dict(self, hypparam_sel: Dict[str, Any] = {}, float_eps: float = 1e-3) -> Dict[int, Dict[int, JobResult]]:
+    def _create_run_dict(self,
+                         hypparam_sel: Dict[str, Any] = {},
+                         float_eps: float = 1e-3) -> Dict[int, Dict[int, JobResult]]:
         """Create a dictionary containing all runs for an instability analysis run.
 
         Returns:
@@ -301,8 +383,16 @@ class InstabilityAnalyzer(Runner):
         return run_dict
 
     def instability_analysis(self, use_tqdm: bool = True, override_files: bool = False) -> Dict[str, pd.DataFrame]:
+        """Perform mutiple instability analyses for all hyperparameter configurations.
 
-        # TODO: drop init_model_idx_k_param_name axis from hpparam_sweep_cfg
+        Args:
+            use_tqdm (bool, optional): Show progress bar. Defaults to True.
+            override_files (bool, optional): Override hyperparameter result files on re-run, use previous resuls otherwise. 
+                                             Defaults to False.
+
+        Returns:
+            Dict[str, pd.DataFrame]: Return combined result tables.
+        """
         LOGGER.info(f'Starting instability analysis..')
         # create sweep
         sweep = Sweeper.create(sweep_config=copy.deepcopy(self._hpparam_sweep_cfg))
@@ -351,6 +441,14 @@ class InstabilityAnalyzer(Runner):
         return combined_results
 
     def load_instability_analysis_for_hpparam(self, hp_sel_str: str) -> Dict[str, pd.DataFrame]:
+        """Load instability analyis result table for a single hyperparameter selection.
+        TODO: this method should also take hyper parameter dictionary as argument.
+        Args:
+            hp_sel_str (str): The hyperparameter selection string. Converted from dictionary.
+
+        Returns:
+            Dict[str, pd.DataFrame]: Result dataframes for this hyperparameter configuration.
+        """
         # hp_sel_str without file_ending
         load_file = self.hp_result_folder_df / f'{hp_sel_str}.{InstabilityAnalyzer.save_pickle_format}'
         with load_file.open(mode='rb') as f:
@@ -401,7 +499,8 @@ def interpolate_linear_runs(
         interpolate_linear_kwargs: Dict[str, Any] = {},
         device: Union[torch.device, str, int] = 'auto',
         return_dataframe: bool = True,
-        dataset_generator: DatasetGenerator = None) -> Union[Dict[str, Any], Tuple[pd.DataFrame, Optional[pd.DataFrame]]]:
+        dataset_generator: DatasetGenerator = None
+) -> Union[Dict[str, Any], Tuple[pd.DataFrame, Optional[pd.DataFrame]]]:
     """Interpolate linearly between models of two runs. 
 
     Args:

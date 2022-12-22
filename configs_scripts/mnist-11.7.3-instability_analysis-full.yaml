@@ -7,15 +7,15 @@ config:
     interpolation_factors: [0.0000, 0.2500, 0.5000, 0.7500, 1.0000]
     init_model_idxes_ks_or_every: 0
     train_model_idxes: [100, -1]
-    device: 1
+    device: 0
     interpolate_linear_kwargs: 
       interpolation_on_train_data: True
       dataloader_kwargs:
-        batch_size: 1024
+        batch_size: 10240
       compute_model_distances: True
     override_files: True
     num_seed_combinations: 1
-    save_folder_suffix: full
+    save_folder_suffix: full2
     float_eps_query_job: 1e-3
     # hpparam_sweep:
     #   type: grid
