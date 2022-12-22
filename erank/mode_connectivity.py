@@ -33,6 +33,44 @@ PARAM_NAME_INIT_MODEL_IDX_K = 'init_model_idx_k'
 
 
 class InstabilityAnalyzer(Runner):
+    """A class that performs instability analysis outlined in Frankle et al., 2020. 
+    Core of this analysis is the linear interpolatin of two models traind with different SGD noise from a varying number
+    of pretraining steps.
+    It takes a SweepResult or the path to the sweep results as input and performs the instability analysis on this sweep.
+    The sweep must contain a parameter (`init_model_idx_k_param_name`) that controls the number of pretrain steps on a model
+    and finetuning runs with at least two seeds. 
+
+    Note:
+        Also computes the instability value according to Frankle et al., 2020, p. 3.
+        Instability = max/min [interpolation_scores] - mean[interpolation_score(0.0), interpolation_score(1.0)]
+
+    References:
+        Frankle, Jonathan, Gintare Karolina Dziugaite, Daniel M. Roy, and Michael Carbin. 2020. 
+            “Linear Mode Connectivity and the Lottery Ticket Hypothesis.” arXiv. http://arxiv.org/abs/1912.05671.
+
+    Args:
+        instability_sweep (Union[SweepResult, str]): The (path to the) sweep result.
+        score_fn (Union[nn.Module, Metric, str], optional): The score function for measuring model performance on the datasets. 
+                                                            Defaults to TAccuracy().
+        interpolation_factors (List[float], optional): List of interpolation factors. Defaults to list(torch.linspace(0.0, 1.0, 5)).
+        interpolate_linear_kwargs (Dict[str, Any], optional): Some keyword arguments for `interpolate_linear()`. Defaults to {}.
+        init_model_idx_k_param_name (str, optional): The parameter name that specifies the amount of pretraining in the sweep. 
+                                                     Defaults to 'trainer.init_model_step'.
+        device (str, optional): The device, e.g. the GPU id. Defaults to 'auto'.
+        save_results_to_disc (bool, optional): Save results and logging to disc. Defaults to True.
+        override_files (bool, optional): Override results for all hyperparameters, load existing results otherwise. Defaults to False.
+        num_seed_combinations (int, optional): Number of seed combinations for linear interpolation. Defaults to 1.
+        init_model_idxes_ks_or_every (Union[List[int], int], optional): A list of pretrain model indexes or an interval to use every j-th pretraining model index. 
+                                                                        If 0, use all available pretrain indexes. Defaults to 0.
+        train_model_idxes (List[int], optional): Perform linear interpolation between models with these finetuning indices from to runs
+                                                 with different seeds. Defaults to [-1].
+        save_folder_suffix (str, optional): Suffix for instability analysis result folder in sweep directory. Defaults to ''.
+        float_eps_query_job (float, optional): Epsilon for floating point hyperparameter value comparison. Defaults to 1e-3.
+        hpparam_sweep (DictConfig, optional): Sweep config producing the hyperparameters on which instability analysis should be performed.
+                                              Can be used to provide a subset of hyperparameters to perform instability analysis on.
+                                              If None, use sweep config from sweep result, i.e. perform instability analysis on all 
+                                              hyperparameter combinations. Defaults to None.
+    """
     str_name = 'instability_analyzer'
     save_readable_format = 'xlsx'
     save_pickle_format = 'p'
@@ -45,7 +83,7 @@ class InstabilityAnalyzer(Runner):
     key_distance_result_df = 'distances'
 
     def __init__(self,
-                 instability_sweep: Union[SweepResult, str],
+                 instability_sweep: Union[SweepResult, Path, str],
                  score_fn: Union[nn.Module, Metric, str] = TAccuracy(),
                  interpolation_factors: List[float] = list(torch.linspace(0.0, 1.0, 5)),
                  interpolate_linear_kwargs: Dict[str, Any] = {},
@@ -59,45 +97,6 @@ class InstabilityAnalyzer(Runner):
                  save_folder_suffix: str = '',
                  float_eps_query_job: float = 1e-3,
                  hpparam_sweep: DictConfig = None):
-        """A class that performs instability analysis outlined in Frankle et al., 2020. 
-        Core of this analysis is the linear interpolatin of two models traind with different SGD noise from a varying number
-        of pretraining steps.
-
-        It takes a SweepResult or the path to the sweep results as input and performs the instability analysis on this sweep.
-        The sweep must contain a parameter (`init_model_idx_k_param_name`) that controls the number of pretrain steps on a model
-        and finetuning runs with at least two seeds. 
-
-        Note:
-            Also computes the instability value according to Frankle et al., 2020, p. 3.
-            Instability = max/min [interpolation_scores] - mean[interpolation_score(0.0), interpolation_score(1.0)]
-    
-        References:
-            Frankle, Jonathan, Gintare Karolina Dziugaite, Daniel M. Roy, and Michael Carbin. 2020. 
-                “Linear Mode Connectivity and the Lottery Ticket Hypothesis.” arXiv. http://arxiv.org/abs/1912.05671.
-
-        Args:
-            instability_sweep (Union[SweepResult, str]): The (path to the) sweep result.
-            score_fn (Union[nn.Module, Metric, str], optional): The score function for measuring model performance on the datasets. 
-                                                                Defaults to TAccuracy().
-            interpolation_factors (List[float], optional): List of interpolation factors. Defaults to list(torch.linspace(0.0, 1.0, 5)).
-            interpolate_linear_kwargs (Dict[str, Any], optional): Some keyword arguments for `interpolate_linear()`. Defaults to {}.
-            init_model_idx_k_param_name (str, optional): The parameter name that specifies the amount of pretraining in the sweep. 
-                                                         Defaults to 'trainer.init_model_step'.
-            device (str, optional): The device, e.g. the GPU id. Defaults to 'auto'.
-            save_results_to_disc (bool, optional): Save results and logging to disc. Defaults to True.
-            override_files (bool, optional): Override results for all hyperparameters, load existing results otherwise. Defaults to False.
-            num_seed_combinations (int, optional): Number of seed combinations for linear interpolation. Defaults to 1.
-            init_model_idxes_ks_or_every (Union[List[int], int], optional): A list of pretrain model indexes or an interval to use every j-th pretraining model index. 
-                                                                            If 0, use all available pretrain indexes. Defaults to 0.
-            train_model_idxes (List[int], optional): Perform linear interpolation between models with these finetuning indices from to runs
-                                                     with different seeds. Defaults to [-1].
-            save_folder_suffix (str, optional): Suffix for instability analysis result folder in sweep directory. Defaults to ''.
-            float_eps_query_job (float, optional): Epsilon for floating point hyperparameter value comparison. Defaults to 1e-3.
-            hpparam_sweep (DictConfig, optional): Sweep config producing the hyperparameters on which instability analysis should be performed.
-                                                  Can be used to provide a subset of hyperparameters to perform instability analysis on.
-                                                  If None, use sweep config from sweep result, i.e. perform instability analysis on all 
-                                                  hyperparameter combinations. Defaults to None.
-        """
         #* save call config
         saved_args = copy.deepcopy(locals())
         saved_args.pop('self')
@@ -106,7 +105,7 @@ class InstabilityAnalyzer(Runner):
         #* save start time
         self._start_time = datetime.now()
 
-        if isinstance(instability_sweep, str):
+        if isinstance(instability_sweep, (Path, str)):
             instability_sweep = SweepResult(sweep_dir=instability_sweep)
         self.instability_sweep = instability_sweep
         self.device = get_device(device)
@@ -224,6 +223,38 @@ class InstabilityAnalyzer(Runner):
                 cfg_created = cfg[KEY_CFG_UPDATED]
             cfg[KEY_CFG_CREATED] = cfg_created
             OmegaConf.save(cfg, config_file)
+
+    @staticmethod
+    def reload(sweep_result_dir: Union[SweepResult, Path, str],
+               instability_folder_suffix: str = '') -> "InstabilityAnalyzer":
+        """Reload an InstabilityAnalyzer from disc.
+
+        Args:
+            sweep_result_dir (Union[SweepResult, Path, str]): The sweep of this instability analysis
+            instability_folder_suffix (str, optional): The instability analysis folder suffix. Defaults to ''.
+
+        Returns:
+            InstabilityAnalyzer: The InstabilityAnalyzer configured from files.
+        """
+        from erank.scripts import KEY_RUN_SCRIPT_KWARGS
+        # load config from disc
+        if isinstance(sweep_result_dir, str):
+            sweep_result_dir = Path(sweep_result_dir)
+        elif isinstance(sweep_result_dir, SweepResult):
+            sweep_result_dir = sweep_result_dir.directory
+        assert isinstance(sweep_result_dir, Path)
+        insta_folder_name = f'{InstabilityAnalyzer.fn_instability_analysis}{EXP_NAME_DIVIDER}{instability_folder_suffix}' if instability_folder_suffix else InstabilityAnalyzer.fn_instability_analysis
+        instability_analysis_folder = sweep_result_dir / insta_folder_name
+        config_file = instability_analysis_folder / InstabilityAnalyzer.fn_config
+        cfg = OmegaConf.load(config_file)
+        cfg_instability = cfg[KEY_RUN_SCRIPT_KWARGS]
+
+        # no logging and no changes on files
+        cfg_instability.override_files = False
+        cfg_instability.save_results_to_disc = False
+
+        insta = InstabilityAnalyzer(**cfg_instability)
+        return insta
 
     @property
     def remaining_hyperparams(self) -> Dict[str, Any]:
