@@ -31,7 +31,7 @@ def get_default_normalizer(dataset_name: str) -> Callable:
         assert False, f"Unknown dataset name \"{dataset_name}\". Available datasets are: {str(_default_normalizers.keys())}"
 
 def _prepare_torchdataset(torch_dataset: str,
-                          data_root_path: str,
+                          data_root_path: Union[str, Path],
                           train: bool = True,
                           normalizer: Dict[str, Union[float, List[float]]] = None) -> data.Dataset:
     assert Path(data_root_path).is_absolute()
@@ -83,4 +83,4 @@ class TorchFmnist(TorchBuiltInDataset):
 class TorchCifar10(TorchBuiltInDataset):
 
     def __init__(self, data_root_path: Union[str, Path], train: bool = True):
-        super().__init__('cifar10', data_root_path, train)
+        super().__init__('cifar10', Path(data_root_path) / 'cifar', train)
