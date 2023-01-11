@@ -1,0 +1,97 @@
+defaults:
+- hydra: jobname_outputdir_format
+- _self_
+run_config:
+  exec_type: parallel
+  hostname: dragonfly
+  gpu_ids:
+  - 0
+  runs_per_gpu: 1
+  wandb:
+    init:
+      tags:
+      - ${config.experiment_data.experiment_tag}_exps
+      - run_handler
+      notes: null
+      group: ${config.experiment_data.experiment_tag}
+      job_type: run_handler
+seeds:
+- 0
+sweep:
+  type: grid
+  axes:
+  - parameter: data.dataset_transforms.enable_transforms
+    vals:
+    - true
+    - false
+start_num: 0
+config:
+  experiment_data:
+    entity: jkuiml-fsl
+    project_name: tflearning
+    experiment_tag: '13.0'
+    experiment_type: startnum_${start_num}
+    experiment_name: cifar10-${config.experiment_data.experiment_tag}.${start_num}-resnet-default_hp-aug
+    experiment_dir: null
+    experiment_notes: null
+    job_name: null
+    seed: 0
+    hostname: null
+    gpu_id: 0
+  wandb:
+    init:
+      tags:
+      - ${config.experiment_data.experiment_tag}_exps
+      notes: ${config.experiment_data.experiment_notes}
+      group: ${config.experiment_data.experiment_tag}
+      job_type: ${config.experiment_data.experiment_type}
+    watch:
+      log: null
+      log_freq: null
+  model:
+    model_cfg: resnet20-cifar10
+    init_model: null
+  trainer:
+    training_setup: supervised
+    n_steps: 64000.0
+    log_train_step_every: 1
+    log_additional_train_step_every_multiplier: 1
+    log_additional_logs: true
+    val_every: 100
+    save_every: 10000
+    early_stopping_patience: 64000.0
+    batch_size: 128
+    optimizer_scheduler:
+      optimizer_name: SGD
+      optimizer_kwargs:
+        lr: 0.1
+        momentum: 0.9
+        weight_decay: 0.0001
+      lr_scheduler_name: MultiStepLR
+      lr_scheduler_kwargs:
+        milestones:
+        - 32000.0
+        - 48000.0
+        gamma: 0.1
+    loss: crossentropy
+    metrics:
+    - Accuracy
+    num_workers: 4
+    verbose: false
+  data:
+    dataset: cifar10
+    dataset_kwargs:
+      data_root_path: /system/user/beck/pwbeck/data
+    dataset_split:
+      train_val_split: 0.9
+    dataset_transforms:
+      image_transforms:
+      - RandomHorizontalFlip
+      - RandomCrop:
+          size: 32
+          padding: 4
+      tensor_transforms: null
+      joint_tensor_transforms: null
+      enable_transforms: true
+__config_created: '2023-01-11 19:15:16'
+__config_last_updated: '2023-01-11 19:15:16'
