@@ -1,6 +1,6 @@
 import logging
 import sys
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List
 import torch
 from tqdm import tqdm
 from torch import nn
@@ -40,35 +40,12 @@ class SupervisedTrainer(SubspaceBaseTrainer):
         else:
             self._dataset_generator = DatasetGenerator(dataset=data_cfg.dataset,
                                                        dataset_kwargs=data_cfg.dataset_kwargs,
-                                                       dataset_split=data_cfg.dataset_split, 
+                                                       dataset_split=data_cfg.dataset_split,
                                                        dataset_transforms=data_cfg.get('dataset_transforms', {}))
         self._dataset_generator.generate_dataset()
         train_set, val_set = self._dataset_generator.train_split, self._dataset_generator.val_split
         LOGGER.info(f'Size of training/validation set: ({len(train_set)}/{len(val_set)})')
         self._datasets = dict(train=train_set, val=val_set)
-
-    def _train_step(self, train_batch, batch_idx: int) -> Dict[str, Union[float, torch.Tensor]]:
-        xs, ys = train_batch
-        xs, ys = xs.to(self.device), ys.to(self.device)
-        # forward pass
-        ys_pred = self._model(xs)
-        loss, loss_dict = self._loss(ys_pred, ys, self._model)
-
-        # backward pass
-        self._optimizer.zero_grad()
-        loss.backward()
-        self._optimizer.step()
-
-        # metrics & logging
-        with torch.no_grad():
-            metric_vals = self._train_metrics(ys_pred, ys)
-        additional_logs = self._get_additional_train_step_log(self._train_step_idx)
-        # log step
-        self._log_step(step=self._train_step_idx,
-                       losses_step=loss_dict,
-                       metrics_step=metric_vals,
-                       additional_logs_step=additional_logs)
-        return loss_dict
 
     def _get_additional_train_step_log(self, step: int) -> Dict[str, Any]:
         log_dict = {}
@@ -86,14 +63,7 @@ class SupervisedTrainer(SubspaceBaseTrainer):
 
         return log_dict
 
-    def _log_step(self, step: int, losses_step: Dict[str, torch.Tensor], metrics_step: Dict[str, torch.Tensor],
-                  additional_logs_step: Dict[str, Any]) -> None:
-        if step % self._log_train_step_every == 0:
-            log_dict = {**losses_step, **metrics_step, **additional_logs_step}
-            self._log_losses_metrics(prefix='train_step',
-                                     metrics_epoch=log_dict,
-                                     log_to_console=False)
-
+    # TODO merge this with parent class impl
     def _val_epoch(self, progress_idx: int, trained_model: nn.Module) -> float:
 
         losses_epoch: List[Dict[str, torch.Tensor]] = []
