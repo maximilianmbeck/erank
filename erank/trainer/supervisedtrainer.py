@@ -40,7 +40,8 @@ class SupervisedTrainer(SubspaceBaseTrainer):
         else:
             self._dataset_generator = DatasetGenerator(dataset=data_cfg.dataset,
                                                        dataset_kwargs=data_cfg.dataset_kwargs,
-                                                       dataset_split=data_cfg.dataset_split)
+                                                       dataset_split=data_cfg.dataset_split, 
+                                                       dataset_transforms=data_cfg.get('dataset_transforms', {}))
         self._dataset_generator.generate_dataset()
         train_set, val_set = self._dataset_generator.train_split, self._dataset_generator.val_split
         LOGGER.info(f'Size of training/validation set: ({len(train_set)}/{len(val_set)})')

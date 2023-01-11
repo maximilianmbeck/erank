@@ -13,7 +13,7 @@ LOGGER = logging.getLogger(__name__)
 NORMALIZER_TYPES = ('none', 'default', 'recompute')
 
 
-class RotatedVisionDataset(data.Dataset):
+class RotatedVisionDataset(data.Dataset): # TODO implement Basedataset (has a normalizer), refactor rotation implementation
 
     def __init__(self,
                  dataset: str,

@@ -1,10 +1,11 @@
 import logging
 from typing import Callable, Dict, List, Tuple, Type, Union
 import torch
+from torch import nn
 import torch.utils.data as data
-import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 from pathlib import Path
+from .basedataset import BaseDataset
 
 LOGGER = logging.getLogger(__name__)
 
@@ -33,39 +34,43 @@ def get_default_normalizer(dataset_name: str) -> Callable:
 def _prepare_torchdataset(torch_dataset: str,
                           data_root_path: Union[str, Path],
                           train: bool = True,
-                          normalizer: Dict[str, Union[float, List[float]]] = None) -> data.Dataset:
+                          normalizer: Union[str, Dict[str, Union[float, List[float]]]] = 'default') -> Tuple[data.Dataset, nn.Module]:
     assert Path(data_root_path).is_absolute()
     data_dir = Path(data_root_path)
-    if normalizer is None:
+    if normalizer == 'default':
         default_normalizer = _default_normalizers[torch_dataset]
         LOGGER.info(f'Using default normalizer: {default_normalizer}')
         normalizer = default_normalizer
-    else:
+    elif isinstance(normalizer, dict):
+        assert 'mean' in normalizer
+        assert 'std' in normalizer
         LOGGER.info('Using custom normalizer.')
+    else:
+        normalizer = None
+        LOGGER.info('NOT using a normalizer.')
 
-    transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(normalizer['mean'], normalizer['std'])])
     torch_dataset_class = _torch_dataset_classes[torch_dataset]
-    train_dataset = torch_dataset_class(root=data_dir, train=train, transform=transform, download=True)
-    return train_dataset
+    train_dataset = torch_dataset_class(root=data_dir, train=train, download=True)
+    return train_dataset, normalizer
 
 
-class TorchBuiltInDataset(data.Dataset):
+class TorchBuiltInDataset(BaseDataset):
 
     def __init__(self,
                  dataset: str,
                  data_root_path: Union[str, Path],
                  train: bool = True,
-                 normalizer: Dict[str, Union[float, List[float]]] = None):
-        self._dataset = _prepare_torchdataset(torch_dataset=dataset,
+                 normalizer: Union[str, Dict[str, Union[float, List[float]]]] = 'default'):
+        self.dataset, self._normalizer = _prepare_torchdataset(torch_dataset=dataset,
                                               data_root_path=data_root_path,
                                               train=train,
                                               normalizer=normalizer)
 
     def __getitem__(self, idx) -> Tuple[torch.Tensor, torch.Tensor]:
-        return self._dataset[idx]
+        return self.dataset[idx]
 
     def __len__(self) -> int:
-        return len(self._dataset)
+        return len(self.dataset)
 
 
 class TorchMnist(TorchBuiltInDataset):
