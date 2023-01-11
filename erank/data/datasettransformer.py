@@ -22,7 +22,16 @@ class DatasetTransformer(Dataset):
 
         # find dataset normalizer
         # account for the case that the dataset is a Subset (e.g. when a train_val split is applied)
-        base_dataset = dataset if isinstance(dataset, BaseDataset) else getattr(dataset, 'dataset', None)
+        if isinstance(dataset, BaseDataset):
+            base_dataset = dataset  
+        else:
+            ds = dataset
+            # dataset can be multiple recursive subsets, go along all Subsets
+            while True:
+                ds = getattr(ds, 'dataset', None)
+                if ds is None or isinstance(ds, BaseDataset):
+                    break
+            base_dataset = ds
         if base_dataset is None or not isinstance(base_dataset, BaseDataset):
             raise ValueError(f'Could not find a `BaseDataset` instance for {dataset}.')
 
