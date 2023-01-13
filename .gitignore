@@ -9,5 +9,7 @@ __pycache__/
 outputs/
 tmp/
 res/f_mnist_pretrained
+configs/
+configs_scripts/
 
 .vscode/**
