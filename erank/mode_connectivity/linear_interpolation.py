@@ -261,7 +261,9 @@ def interpolate_linear(model_0: nn.Module,
         for (k0, v0), (k1, v1) in zip(model_0.state_dict().items(), model_1.state_dict().items()):
             if k0 != k1:
                 raise ValueError(f'Model architectures do not match: {k0} != {k1}')
-            torch.lerp(v0, v1, alpha, out=interp_model_state_dict[k0])  # linear interpolation between weights
+            # skip parameters that are non-float, e.g. 'num_batches_tracked' of batchnorm layers
+            if v0.is_floating_point(): 
+                torch.lerp(v0, v1, alpha, out=interp_model_state_dict[k0])  # linear interpolation between weights
         interp_model.load_state_dict(interp_model_state_dict)
 
         if models_have_batch_norm_layers:
