@@ -35,6 +35,8 @@ def interpolate_linear_runs(
         score_fn (Union[nn.Module, Metric]): Performance measure for the models.
         model_idx (Union[int, List[int]], optional): The model index/indices used for linear interpolation. Defaults to -1.
                                                      If -1, use the respective best model.
+                                                     If -2, use the respective model with the highest model index or the model 
+                                                     with the longest training duration.
         interpolation_factors (torch.Tensor, optional): Interpolation factors. Defaults to torch.linspace(0.0, 1.0, 5).
         interpolate_linear_kwargs (Dict[str, Any], optional): Some further keyword arguments for `interpolate_linear`. Defaults to {}.
         device (Union[torch.device, str, int], optional): Device for linear interpolation. Defaults to 'auto'.
@@ -87,6 +89,8 @@ def interpolate_linear_runs(
             models.append(m)
             if midx == -1:
                 m_idxes.append(r.best_model_idx)
+            elif midx == -2:
+                m_idxes.append(r.highest_model_idx)
             else:
                 m_idxes.append(midx)
 

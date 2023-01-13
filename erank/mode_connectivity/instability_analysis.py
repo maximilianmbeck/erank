@@ -22,7 +22,7 @@ from ml_utilities.torch_utils.metrics import get_metric, TAccuracy
 from ml_utilities.run_utils.run_handler import EXP_NAME_DIVIDER
 from ml_utilities.output_loader.repo import KEY_CFG_CREATED, KEY_CFG_UPDATED, FORMAT_CFG_DATETIME
 
-from ml_utilities.run_utils.sweep import Sweeper
+from ml_utilities.run_utils.sweep import Sweeper, SWEEP_TYPE_KEY, SWEEP_TYPE_GRIDVAL
 from erank.data.datasetgenerator import DatasetGenerator
 
 from .linear_interpolation import interpolate_linear_runs
@@ -35,7 +35,7 @@ PARAM_NAME_INIT_MODEL_IDX_K = 'init_model_idx_k'
 
 class InstabilityAnalyzer(Runner):
     """A class that performs instability analysis outlined in Frankle et al., 2020. 
-    Core of this analysis is the linear interpolatin of two models traind with different SGD noise from a varying number
+    Core of this analysis is the linear interpolation of two models traind with different SGD noise from a varying number
     of pretraining steps.
     It takes a SweepResult or the path to the sweep results as input and performs the instability analysis on this sweep.
     The sweep must contain a parameter (`init_model_idx_k_param_name`) that controls the number of pretrain steps on a model
@@ -189,8 +189,10 @@ class InstabilityAnalyzer(Runner):
         self._interpolate_linear_kwargs = interp_lin_default_kwargs
 
         #* sweep hyperparameters
-        if hpparam_sweep is None:
+        if hpparam_sweep is None and self.instability_sweep.sweep_cfg[SWEEP_TYPE_KEY] == SWEEP_TYPE_GRIDVAL:
+            # use sweep parameters only if gridsearch was used
             hpparam_sweep = self.instability_sweep.sweep_cfg
+            
         self._hpparam_sweep_cfg = hpparam_sweep
 
     def _setup(self, config: DictConfig) -> None:
@@ -354,7 +356,7 @@ class InstabilityAnalyzer(Runner):
                 it.set_description_str(desc=f'init_model_idx_k={init_model_idx_k}')
             # for every init_model_idx_k_param_value, there must be jobs with all used seeds.
             assert set(self._used_seeds).issubset(set(
-                k_dict.keys())), f'Some seeds are missing for hyperparameter selection: {hypparam_sel}'
+                k_dict.keys())), f'Some seeds are missing for hyperparameter selection: {hypparam_sel}, init_model_idx_k: {init_model_idx_k}'
 
             k_runs = dataset_dfs.get(init_model_idx_k, None)
             if k_runs is None:
@@ -426,11 +428,16 @@ class InstabilityAnalyzer(Runner):
             Dict[str, pd.DataFrame]: Return combined result tables.
         """
         LOGGER.info(f'Starting instability analysis..')
-        # create sweep
-        sweep = Sweeper.create(sweep_config=copy.deepcopy(self._hpparam_sweep_cfg))
-        sweep.drop_axes(ax_param_names=[self._init_model_idx_k_param_name, 'experiment_data.seed'])
-        hp_combinations = sweep.generate_sweep_parameter_combinations(flatten_hierarchical_dicts=True)
-        hp_combinations_str = [hyp_param_cfg_to_str(hp) for hp in hp_combinations]
+        if self._hpparam_sweep_cfg is not None:
+            # create sweep
+            sweep = Sweeper.create(sweep_config=copy.deepcopy(self._hpparam_sweep_cfg))
+            sweep.drop_axes(ax_param_names=[self._init_model_idx_k_param_name, 'experiment_data.seed'])
+            hp_combinations = sweep.generate_sweep_parameter_combinations(flatten_hierarchical_dicts=True)
+            hp_combinations_str = [hyp_param_cfg_to_str(hp) for hp in hp_combinations]
+        else:
+            LOGGER.info('No sweep hyperparameters specified or found: Doing single instability analysis.')
+            hp_combinations = [{}]
+            hp_combinations_str = ['default_params']
         LOGGER.info(f'Number of hyperparameter combinations for instability analysis: {len(hp_combinations)}')
 
         # perform instability analysis
@@ -455,10 +462,13 @@ class InstabilityAnalyzer(Runner):
                 distance_result_dfs.append(dist_df)
 
         # create multiindex
-        hp_lists = convert_listofdicts_to_dictoflists(hp_combinations)
-        # hp_names = [hp_name.split('.')[-1] for hp_name in hp_lists.keys()]
-        hp_names = list(hp_lists.keys())
-        index = pd.MultiIndex.from_arrays(list(hp_lists.values()), names=hp_names)
+        if hp_combinations[0] == {}:
+            # only default parameters are used
+            index = pd.MultiIndex.from_arrays([['default_params']], names=['default_params'])
+        else:
+            hp_lists = convert_listofdicts_to_dictoflists(hp_combinations)
+            hp_names = list(hp_lists.keys())
+            index = pd.MultiIndex.from_arrays(list(hp_lists.values()), names=hp_names)
 
         dataset_result_df = pd.concat(dataset_result_dfs, keys=index)
         combined_results = {InstabilityAnalyzer.key_dataset_result_df: dataset_result_df}
