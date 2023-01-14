@@ -211,10 +211,6 @@ def interpolate_linear(model_0: nn.Module,
     assert interpolation_factors.dim() == 1, '`interpolation_factors` must be tensor of dimension 1.'
     bn_types = (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)
 
-    def reset_bn_running_stats(module: nn.Module) -> None:
-        if isinstance(module, bn_types):
-            module.reset_running_stats()
-
     def eval_loop(model: nn.Module, dataloader: data.DataLoader, score_fn: nn.Module) -> float:
         batch_scores = []
         for batch_idx, (xs, ys) in enumerate(dataloader):
@@ -268,11 +264,10 @@ def interpolate_linear(model_0: nn.Module,
 
         if models_have_batch_norm_layers:
             # reset running stats
-            interp_model.apply(reset_bn_running_stats)
             # compute batch_norm statistics on train_dataset
+            # rely on torch.optim.swa_utils.uptade_bn, since it takes care of batchnorm momentum 
             train_loader = data.DataLoader(train_dataset, **dataloader_kwargs)
-            interp_model.train(True)
-            _ = eval_loop(model=interp_model, dataloader=train_loader, score_fn=score_fn)
+            torch.optim.swa_utils.update_bn(loader=train_loader, model=interp_model, device=device)
 
         interp_model.train(False)
         # eval on eval_datasets
