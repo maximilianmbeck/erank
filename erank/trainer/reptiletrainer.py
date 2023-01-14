@@ -1,6 +1,6 @@
 import logging
 import copy
-from typing import Dict, Tuple, List
+from typing import Any, Dict, Tuple, List, Union
 import torch
 import pandas as pd
 import numpy as np
@@ -454,6 +454,20 @@ class ReptileTrainer(SubspaceBaseTrainer):
         val_score = losses_eval_after_df.mean()[f'{val_score_metric_name}{LOG_SEP_SYMBOL}after']
         self._reset_metrics('val')
         return val_score
+
+    def _log_losses_metrics(self,
+                            prefix: str,
+                            losses_epoch: Union[Dict[str, Union[List[torch.Tensor], torch.Tensor]],
+                                                List[Dict[str, torch.Tensor]]] = {},
+                            metrics_epoch: Dict[str, Any] = {},
+                            log_to_console: bool = True) -> None:
+        self._logger.log_keys_vals(prefix=prefix,
+                                   epoch=self._epoch_idx,
+                                   train_step=self._train_step_idx,
+                                   keys_multiple_vals=losses_epoch,
+                                   keys_val=metrics_epoch,
+                                   log_to_console=log_to_console)
+
 
     def __plot_inner_learning_curves(self,
                                      epoch: int,

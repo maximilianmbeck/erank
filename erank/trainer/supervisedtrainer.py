@@ -41,7 +41,8 @@ class SupervisedTrainer(SubspaceBaseTrainer):
             self._dataset_generator = DatasetGenerator(dataset=data_cfg.dataset,
                                                        dataset_kwargs=data_cfg.dataset_kwargs,
                                                        dataset_split=data_cfg.dataset_split,
-                                                       dataset_transforms=data_cfg.get('dataset_transforms', {}))
+                                                       train_split_transforms=data_cfg.get('train_split_transforms', {}), 
+                                                       val_split_transforms=data_cfg.get('val_split_transforms', {}))
         self._dataset_generator.generate_dataset()
         train_set, val_set = self._dataset_generator.train_split, self._dataset_generator.val_split
         LOGGER.info(f'Size of training/validation set: ({len(train_set)}/{len(val_set)})')
@@ -63,27 +64,8 @@ class SupervisedTrainer(SubspaceBaseTrainer):
 
         return log_dict
 
-    # TODO merge this with parent class impl
-    def _val_epoch(self, progress_idx: int, trained_model: nn.Module) -> float:
-
-        losses_epoch: List[Dict[str, torch.Tensor]] = []
-
-        pbar = tqdm(self._loaders['val'], desc=f'Val after {self._progress_measure} {progress_idx}', file=sys.stdout)
-        for xs, ys in pbar:
-            xs, ys = xs.to(self.device), ys.to(self.device)
-
-            with torch.no_grad():
-                y_pred = trained_model(xs)
-
-                loss, loss_dict = self._loss(y_pred, ys)
-                m_val = self._val_metrics(y_pred, ys)
-            losses_epoch.append(loss_dict)
-
-        # compute mean metrics over dataset
-        metrics_epoch = self._val_metrics.compute()
-        val_score = self._finish_val_epoch(losses_epoch, metrics_epoch)
+    def _hook_on_val_epoch_end(self, progress_idx: int, trained_model: nn.Module) -> None:
         self._plot_predictions(epoch=progress_idx, model=trained_model)
-        return val_score
 
     def _plot_predictions(self, epoch: int, model: nn.Module) -> None:
         if self._plot_predictions_every_val_multiplier > 0 and epoch % int(
