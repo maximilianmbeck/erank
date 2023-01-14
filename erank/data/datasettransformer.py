@@ -76,6 +76,9 @@ class DatasetTransformer(Dataset):
                tensor_transforms: Dict[str, Any] = {},
                joint_tensor_transforms: Dict[str, Any] = {},
                enable_transforms: bool = True) -> 'DatasetTransformer':
+        if dataset is None:
+            return None
+        
         it = [create_transform(t) for t in image_transforms] if image_transforms else []
         tt = [create_transform(t) for t in tensor_transforms] if tensor_transforms else []
         jtt = [create_transform(t) for t in joint_tensor_transforms] if joint_tensor_transforms else []
