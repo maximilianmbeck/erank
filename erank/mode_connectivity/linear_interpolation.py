@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import sys
 import copy
 import torch
+import logging
 import pandas as pd
 import numpy as np
 import torch.utils.data as data
@@ -9,18 +10,20 @@ from torch import nn
 from torchmetrics import Metric
 from tqdm import tqdm
 
-from ml_utilities.output_loader.job_output import JobResult
+from ml_utilities.output_loader.result_loader import JobResult
 from ml_utilities.utils import get_device, hyp_param_cfg_to_str
 from ml_utilities.run_utils.run_handler import EXP_NAME_DIVIDER
 
 from erank.data.datasetgenerator import DatasetGenerator
 
 
+LOGGER = logging.getLogger(__name__)
+
 def interpolate_linear_runs(
         run_0: JobResult,
         run_1: JobResult,
         score_fn: Union[nn.Module, Metric],
-        model_idx: Union[int, List[int]] = -1,
+        model_idx: Union[int, List[int]] = [-1, -2],
         interpolation_factors: torch.Tensor = torch.linspace(0.0, 1.0, 5),
         interpolate_linear_kwargs: Dict[str, Any] = {},
         device: Union[torch.device, str, int] = 'auto',
@@ -234,6 +237,16 @@ def interpolate_linear(model_0: nn.Module,
         eval_datasets['train'] = train_dataset  # reference only
     ds_dict = {ds_name: [] for ds_name in eval_datasets}
 
+    # add base_interpolation_factors (=interpolation factors that correspond to base models)
+    # if not already in the interpolation factors
+    base_interpolation_factors = [0.0, 1.0]
+    interpolation_factors = interpolation_factors.tolist()
+    for f in base_interpolation_factors:
+        if not f in interpolation_factors:
+            interpolation_factors.append(f)
+    interpolation_factors.sort()
+    interpolation_factors = torch.tensor(interpolation_factors)
+
     res_dict = {}
     res_dict['interpolation_factors'] = interpolation_factors.tolist()
 
@@ -287,9 +300,8 @@ def interpolate_linear(model_0: nn.Module,
 
     # compute instability value
     # find weight indices for base models
-    # (necessary if 0. and 1. value not and beginning or end of interpolation_factors tensor)
+    # (necessary if 0. and 1. value not at beginning or end of interpolation_factors tensor)
     original_models_in_interpolation_factors = True
-    base_interpolation_factors = [0.0, 1.0]
     interp_factors_list = interpolation_factors.tolist()
     base_interpolation_factor_idxes = []
     for f in base_interpolation_factors:
@@ -297,6 +309,7 @@ def interpolate_linear(model_0: nn.Module,
             base_interpolation_factor_idxes.append(interp_factors_list.index(f))
         except ValueError:
             original_models_in_interpolation_factors = False
+            LOGGER.warning(f'Interpolation factor {f} missing. Cannot compute instability value!')
             break
 
     # compute instability per dataset
@@ -305,7 +318,8 @@ def interpolate_linear(model_0: nn.Module,
             interp_scores = torch.tensor(interp_scores)
             base_mean = interp_scores[base_interpolation_factor_idxes].mean()
             torch_minmax = torch.min if score_fn.higher_is_better else torch.max
-            instability = torch_minmax(interp_scores) - base_mean
+            interp_scores_between_bases = interp_scores[base_interpolation_factor_idxes[0]:(base_interpolation_factor_idxes[1]+1)]
+            instability = torch_minmax(interp_scores_between_bases) - base_mean
             return instability.item()
         else:
             return float('nan')

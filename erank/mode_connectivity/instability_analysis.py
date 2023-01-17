@@ -11,11 +11,11 @@ import numpy as np
 from torch import nn
 from torchmetrics import Metric
 from tqdm import tqdm
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf
 from datetime import datetime
 
 from ml_utilities.runner import Runner
-from ml_utilities.output_loader.job_output import JobResult, SweepResult
+from ml_utilities.output_loader.result_loader import JobResult, SweepResult
 from ml_utilities.time_utils import FORMAT_DATETIME_SHORT
 from ml_utilities.utils import get_device, hyp_param_cfg_to_str, convert_listofdicts_to_dictoflists, setup_logging
 from ml_utilities.torch_utils.metrics import get_metric, TAccuracy
@@ -63,8 +63,8 @@ class InstabilityAnalyzer(Runner):
         num_seed_combinations (int, optional): Number of seed combinations for linear interpolation. Defaults to 1.
         init_model_idxes_ks_or_every (Union[List[int], int], optional): A list of pretrain model indexes or an interval to use every j-th pretraining model index. 
                                                                         If 0, use all available pretrain indexes. Defaults to 0.
-        train_model_idxes (List[int], optional): Perform linear interpolation between models with these finetuning indices from to runs
-                                                 with different seeds. Defaults to [-1].
+        train_model_idxes (List[int], optional): Perform linear interpolation between models with these finetuning indices from runs
+                                                 with different seeds. Defaults to [-1, -2].
         save_folder_suffix (str, optional): Suffix for instability analysis result folder in sweep directory. Defaults to ''.
         float_eps_query_job (float, optional): Epsilon for floating point hyperparameter value comparison. Defaults to 1e-3.
         hpparam_sweep (DictConfig, optional): Sweep config producing the hyperparameters on which instability analysis should be performed.
@@ -88,19 +88,21 @@ class InstabilityAnalyzer(Runner):
                  score_fn: Union[nn.Module, Metric, str] = TAccuracy(),
                  interpolation_factors: List[float] = list(torch.linspace(0.0, 1.0, 5)),
                  interpolate_linear_kwargs: Dict[str, Any] = {},
-                 init_model_idx_k_param_name: str = 'trainer.init_model_step',
+                 init_model_idx_k_param_name: str = 'trainer.resume_training.checkpoint_idx',
                  device: str = 'auto',
                  save_results_to_disc: bool = True,
                  override_files: bool = False,
                  num_seed_combinations: int = 1,
                  init_model_idxes_ks_or_every: Union[List[int], int] = 0,
-                 train_model_idxes: List[int] = [-1],
+                 train_model_idxes: List[int] = [-1, -2],
                  save_folder_suffix: str = '',
                  float_eps_query_job: float = 1e-3,
                  hpparam_sweep: DictConfig = None):
         #* save call config
         saved_args = copy.deepcopy(locals())
         saved_args.pop('self')
+        if '__class__' in saved_args:
+            saved_args.pop('__class__')
         config = OmegaConf.create(saved_args)
 
         #* save start time
@@ -109,6 +111,7 @@ class InstabilityAnalyzer(Runner):
         if isinstance(instability_sweep, (Path, str)):
             instability_sweep = SweepResult(sweep_dir=instability_sweep)
         self.instability_sweep = instability_sweep
+        super().__init__(runner_dir=instability_sweep.directory)
         self.device = get_device(device)
         self._save_results_to_disc = save_results_to_disc
         self._override_files = override_files
@@ -126,11 +129,11 @@ class InstabilityAnalyzer(Runner):
         #* get k parameter (init_model_idx) values from sweep
         k_param_values = self.instability_sweep.get_sweep_param_values(init_model_idx_k_param_name)
         if len(k_param_values) == 0:
-            raise ValueError(f'No hyperparameter found for k parameter name: `{self._init_model_idx_k_param_name}`')
+            raise ValueError(f'No successful hyperparameter job found for k parameter name: `{init_model_idx_k_param_name}`')
 
         if len(k_param_values) > 1:
             raise ValueError(
-                f'Multiple hyperparemeters found for k parameter name: `{self._init_model_idx_k_param_name}` - Specify further!'
+                f'Multiple hyperparemeters found for k parameter name: `{init_model_idx_k_param_name}` - Specify further!'
             )
 
         self._init_model_idx_k_param_name = list(k_param_values.keys())[0]
@@ -144,9 +147,9 @@ class InstabilityAnalyzer(Runner):
                 self._subset_init_idx_k_param_values = self._all_init_idx_k_param_values[::init_model_idxes_ks_or_every]
             else:
                 self._subset_init_idx_k_param_values = self._all_init_idx_k_param_values
-        elif isinstance(init_model_idxes_ks_or_every, list):
-            self._subset_init_idx_k_param_values = np.array(
-                self._all_init_idx_k_param_values)[init_model_idxes_ks_or_every].tolist()
+        elif isinstance(init_model_idxes_ks_or_every, (list, ListConfig)):
+            # TODO add assert, check that all idxes available
+            self._subset_init_idx_k_param_values = list(init_model_idxes_ks_or_every) #np.array(self._all_init_idx_k_param_values)[init_model_idxes_ks_or_every].tolist()
         else:
             raise ValueError(
                 f'Unsupported type `{type(init_model_idxes_ks_or_every)}` for `init_model_idxes_or_every`.')
