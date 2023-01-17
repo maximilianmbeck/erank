@@ -64,7 +64,7 @@ class InstabilityAnalyzer(Runner):
         num_seed_combinations (int, optional): Number of seed combinations for linear interpolation. Defaults to 1.
         init_model_idxes_ks_or_every (Union[List[int], int], optional): A list of pretrain model indexes or an interval to use every j-th pretraining model index. 
                                                                         If 0, use all available pretrain indexes. Defaults to 0.
-        train_model_idxes (List[int], optional): Perform linear interpolation between models with these finetuning indices from runs
+        interpolate_at_model_idxes (List[int], optional): Perform linear interpolation between models with these finetuning indices from runs
                                                  with different seeds. Defaults to [-1, -2].
         save_folder_suffix (str, optional): Suffix for instability analysis result folder in sweep directory. Defaults to ''.
         float_eps_query_job (float, optional): Epsilon for floating point hyperparameter value comparison. Defaults to 1e-3.
