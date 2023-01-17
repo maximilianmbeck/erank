@@ -35,9 +35,9 @@ class DatasetGenerator(DatasetGeneratorInterface):
         dataset_split (Dict[str, Any], optional): Keyword args for splitting the dataset. 
                                                   If not provided, the full dataset can be accessed via `val_split`. Defaults to {}.
         train_split_transforms (Dict[str, Any], optional): Keyword args for adding transformation to the train split of the dataset.
-                                                             If not provided, just try to normalize the dataset. Defaults to {}.
-        val_split_transforms (Dict[str, Any], optional): Keyword args for adding transformation to the val split of the dataset.
                                                            If not provided, just try to normalize the dataset. Defaults to {}.
+        val_split_transforms (Dict[str, Any], optional): Keyword args for adding transformation to the val split of the dataset.
+                                                         If not provided, just try to normalize the dataset. Defaults to {}.
     """
 
     def __init__(self,

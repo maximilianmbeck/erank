@@ -7,11 +7,10 @@ import torch
 import itertools
 import pickle
 import pandas as pd
-import numpy as np
 from torch import nn
 from torchmetrics import Metric
 from tqdm import tqdm
-from omegaconf import DictConfig, ListConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf, open_dict
 from datetime import datetime
 
 from ml_utilities.runner import Runner
@@ -50,7 +49,9 @@ class InstabilityAnalyzer(Runner):
             “Linear Mode Connectivity and the Lottery Ticket Hypothesis.” arXiv. http://arxiv.org/abs/1912.05671.
 
     Args:
-        instability_sweep (Union[SweepResult, str]): The (path to the) sweep result.
+        main_training_job (Union[JobResult, str]): The main training run that creates the checkpoints for resuming.
+                                                   Provide this for Instability analysis a la Frankle et al. 
+        instability_sweep (Union[SweepResult, str]): The (path to the) sweep result. Contains all runs to earlier training checkpoints.
         score_fn (Union[nn.Module, Metric, str], optional): The score function for measuring model performance on the datasets. 
                                                             Defaults to TAccuracy().
         interpolation_factors (List[float], optional): List of interpolation factors. Defaults to list(torch.linspace(0.0, 1.0, 5)).
@@ -85,6 +86,7 @@ class InstabilityAnalyzer(Runner):
 
     def __init__(self,
                  instability_sweep: Union[SweepResult, Path, str],
+                 main_training_job: Union[JobResult, Path, str] = None,
                  score_fn: Union[nn.Module, Metric, str] = TAccuracy(),
                  interpolation_factors: List[float] = list(torch.linspace(0.0, 1.0, 5)),
                  interpolate_linear_kwargs: Dict[str, Any] = {},
@@ -94,7 +96,7 @@ class InstabilityAnalyzer(Runner):
                  override_files: bool = False,
                  num_seed_combinations: int = 1,
                  init_model_idxes_ks_or_every: Union[List[int], int] = 0,
-                 train_model_idxes: List[int] = [-1, -2],
+                 interpolate_at_model_idxes: List[int] = [-1, -2], # TODO rename: interpolate at model_idxes
                  save_folder_suffix: str = '',
                  float_eps_query_job: float = 1e-3,
                  hpparam_sweep: DictConfig = None):
@@ -107,7 +109,9 @@ class InstabilityAnalyzer(Runner):
 
         #* save start time
         self._start_time = datetime.now()
-
+        if isinstance(main_training_job, (Path, str)):
+            main_training_job = JobResult(job_dir=main_training_job)
+        self.main_training_job = main_training_job
         if isinstance(instability_sweep, (Path, str)):
             instability_sweep = SweepResult(sweep_dir=instability_sweep)
         self.instability_sweep = instability_sweep
@@ -137,10 +141,9 @@ class InstabilityAnalyzer(Runner):
             )
 
         self._init_model_idx_k_param_name = list(k_param_values.keys())[0]
-        k_param_values = list(k_param_values.values())[0]
 
         #* parameter specifying the rewind point / number of pretraining steps/epochs
-        self._all_init_idx_k_param_values = k_param_values
+        self._all_init_idx_k_param_values = list(k_param_values.values())[0]
         # find subset of parameter values
         if isinstance(init_model_idxes_ks_or_every, int):
             if init_model_idxes_ks_or_every > 0:
@@ -149,20 +152,23 @@ class InstabilityAnalyzer(Runner):
                 self._subset_init_idx_k_param_values = self._all_init_idx_k_param_values
         elif isinstance(init_model_idxes_ks_or_every, (list, ListConfig)):
             # TODO add assert, check that all idxes available
-            self._subset_init_idx_k_param_values = list(init_model_idxes_ks_or_every) #np.array(self._all_init_idx_k_param_values)[init_model_idxes_ks_or_every].tolist()
+            self._subset_init_idx_k_param_values = list(init_model_idxes_ks_or_every)
         else:
             raise ValueError(
                 f'Unsupported type `{type(init_model_idxes_ks_or_every)}` for `init_model_idxes_or_every`.')
         LOGGER.info(f'Using init_model_idxes / k parameters: {self._subset_init_idx_k_param_values}')
 
         #* model indices for finetuned models
-        self._train_model_idxes = train_model_idxes
+        self._interpolate_at_model_idxes = interpolate_at_model_idxes
 
         LOGGER.info(f'Finding seed combinations..')
         #* find seed combinations
         sweep_seeds = list(self.instability_sweep.get_sweep_param_values('seed').values())[0]
-        if len(sweep_seeds) < 2:
-            raise ValueError('Sweep contains less than 2 seeds!')
+        if len(sweep_seeds) < 1:
+            raise ValueError('Instability sweep contains no successfull runs!')
+        # add seed from main_training run. 
+        if self.main_training_job:
+            sweep_seeds.append(self.main_training_job.seed)
         available_seed_combinations = list(itertools.combinations(sweep_seeds, 2))
         seed_combinations = available_seed_combinations[:num_seed_combinations]
         if len(available_seed_combinations) < num_seed_combinations:
@@ -345,7 +351,11 @@ class InstabilityAnalyzer(Runner):
         # create dataset_generator and avoid reloading the dataset on every iteration
         # Get any jobresult from the run_dict. They all have the same data config.
         first_jobresult = list(list(run_dict.values())[0].values())[0]
-        data_cfg = first_jobresult.config.config.data
+        data_cfg = copy.deepcopy(first_jobresult.config.config.data)
+        # set training augmentations to the validation augmentations
+        # typically we use augmentations on train data; we do not want to have them for instability analysis on train data
+        with open_dict(data_cfg):
+            data_cfg.train_split_transforms = data_cfg.get('val_split_transforms', {})
         ds_generator = DatasetGenerator(**data_cfg)
         ds_generator.generate_dataset()
 
@@ -368,12 +378,12 @@ class InstabilityAnalyzer(Runner):
 
             for sc in self.seed_combinations:
                 run_0, run_1 = k_dict[sc[0]], k_dict[sc[1]]
-                for train_model_idx in self._train_model_idxes:
+                for interpolate_at_model_idx in self._interpolate_at_model_idxes:
                     interp_result_ds_df, interp_result_dist_df = interpolate_linear_runs(
                         run_0=run_0,
                         run_1=run_1,
                         score_fn=self.score_fn,
-                        model_idx=train_model_idx,
+                        model_idx=interpolate_at_model_idx,
                         interpolation_factors=torch.tensor(self.interpolation_factors),
                         interpolate_linear_kwargs=self._interpolate_linear_kwargs,
                         device=self.device,
@@ -403,6 +413,7 @@ class InstabilityAnalyzer(Runner):
                          hypparam_sel: Dict[str, Any] = {},
                          float_eps: float = 1e-3) -> Dict[int, Dict[int, JobResult]]:
         """Create a dictionary containing all runs for an instability analysis run.
+        If hypparam_sel={}, add the main_training_job_dir
 
         Returns:
             Dict[int, Dict[int, JobResult]]: Dictionary with all runs necessary for instability analysis.
@@ -415,6 +426,8 @@ class InstabilityAnalyzer(Runner):
             hp_sel.update(add_hp_sel)
             _, jobs = self.instability_sweep.query_jobs(hp_sel, float_eps=float_eps)
             k_dict = {job.seed: job for job in jobs}
+            if self.main_training_job:
+                k_dict[self.main_training_job.seed] = self.main_training_job
             run_dict[k] = k_dict
 
         return run_dict

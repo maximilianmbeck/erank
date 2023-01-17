@@ -9,6 +9,7 @@ import torch.utils.data as data
 from torch import nn
 from torchmetrics import Metric
 from tqdm import tqdm
+from omegaconf import open_dict
 
 from ml_utilities.output_loader.result_loader import JobResult
 from ml_utilities.utils import get_device, hyp_param_cfg_to_str
@@ -64,7 +65,11 @@ def interpolate_linear_runs(
 
     if dataset_generator is None:
         # use dataset from run_0 for dataset setup
-        data_cfg = run_0.config.config.data
+        data_cfg = copy.deepcopy(run_0.config.config.data)
+        # set training augmentations to the validation augmentations
+        with open_dict(data_cfg):
+            data_cfg.train_split_transforms = data_cfg.get('val_split_transforms', None)
+
         ds_generator = DatasetGenerator(**data_cfg)
         ds_generator.generate_dataset()
     else:
