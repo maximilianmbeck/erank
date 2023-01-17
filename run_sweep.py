@@ -1,25 +1,11 @@
-from pathlib import Path
 import hydra
-import logging
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 
-from ml_utilities.run_utils.run_handler import RunHandler
-from hydra.core.hydra_config import HydraConfig
-from hydra.utils import get_original_cwd
-LOGGER = logging.getLogger(__name__)
-
+from ml_utilities.runner import run_sweep
 
 @hydra.main(version_base=None, config_path='configs', config_name='config.yaml')
 def run(cfg: DictConfig):
-    # add hydra config
-    hydra_config = OmegaConf.create({'hydra': HydraConfig.get()})
-    cfg = OmegaConf.merge(hydra_config, cfg)
-    LOGGER.info(f'Starting experiment with config: \n{OmegaConf.to_yaml(cfg)}')
-    # absolute path to run script
-    # script_path='/system/user/beck/pwbeck/projects/regularization/erank/run.py'
-    script_path = Path(get_original_cwd()) / 'run.py'
-    run_handler = RunHandler(cfg, script_path)
-    run_handler.run()
+    run_sweep(cfg)
 
 if __name__=='__main__':
     run()
