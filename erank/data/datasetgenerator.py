@@ -50,8 +50,8 @@ class DatasetGenerator(DatasetGeneratorInterface):
         self.dataset_class = get_dataset_class(dataset_name=dataset)
         self.dataset_kwargs = dataset_kwargs
         self.dataset_split = dataset_split
-        self.train_dataset_tansforms = train_split_transforms
-        self.val_dataset_transforms = val_split_transforms
+        self.train_split_tansforms = train_split_transforms
+        self.val_split_transforms = val_split_transforms
         self._train_split = None
         self._val_split = None
         self._dataset_generated = False
@@ -65,9 +65,9 @@ class DatasetGenerator(DatasetGeneratorInterface):
             self._train_split, self._val_split = random_split_train_tasks(dataset=dataset, **self.dataset_split)
 
         # add data normalization and augmentations
-        self._train_split = DatasetTransformer.create(self._train_split, **self.train_dataset_tansforms)
+        self._train_split = DatasetTransformer.create(self._train_split, **self.train_split_tansforms)
         # add only normalization
-        self._val_split = DatasetTransformer.create(self._val_split, **self.val_dataset_transforms)
+        self._val_split = DatasetTransformer.create(self._val_split, **self.val_split_transforms)
 
         self._dataset_generated = True
 
