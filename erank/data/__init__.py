@@ -4,15 +4,13 @@ from erank.data.basemetadataset import BaseMetaDataset
 
 from erank.data.miniimagenetdataset import MiniImagenetDataset
 from erank.data.omniglotdataset import OmniglotDataset
-from erank.data.rotatedvisiondataset import RotatedVisionDataset
 from erank.data.sinusdataset import SinusDataset
-from erank.data.torchbuiltindatasets import TorchCifar10, TorchFmnist, TorchMnist
+from ml_utilities.data.torchbuiltindatasets import TorchCifar10, TorchFmnist, TorchMnist
 
 _dataset_registry = {
     'mnist': TorchMnist,
     'fashion_mnist': TorchFmnist,
     'cifar10': TorchCifar10,
-    'rotatedvision': RotatedVisionDataset
 }
 
 _metadataset_registry = {'sinus': SinusDataset, 'omniglot': OmniglotDataset, 'mini-imagenet': MiniImagenetDataset}

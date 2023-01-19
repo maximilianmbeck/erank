@@ -7,7 +7,7 @@ from torch import nn
 from omegaconf import DictConfig
 import matplotlib.pyplot as plt
 from erank.data.basemetadataset import support_query_as_minibatch
-from erank.data.datasetgenerator import DatasetGenerator
+from ml_utilities.data.datasetgenerator import DatasetGenerator
 from erank.data.supervised_metadataset_wrapper import SupervisedMetaDatasetWrapper
 from erank.trainer.subspacebasetrainer import SubspaceBaseTrainer
 

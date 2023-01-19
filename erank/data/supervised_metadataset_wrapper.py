@@ -3,7 +3,7 @@ from torch.utils import data
 from typing import Any, Dict
 from erank.data import get_metadataset_class
 from erank.data.basemetadataset import Task
-from erank.data.datasetgenerator import DatasetGeneratorInterface
+from ml_utilities.data.datasetgenerator import DatasetGeneratorInterface
 
 
 class SupervisedMetaDatasetWrapper(DatasetGeneratorInterface):
