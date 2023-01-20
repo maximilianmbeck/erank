@@ -2,7 +2,7 @@ import logging
 from torch import nn
 from omegaconf import DictConfig
 from ml_utilities.torch_utils import get_loss
-from ml_utilities.trainers.supervisedbasetrainer import SupervisedBaseTrainer
+from ml_utilities.trainer.supervisedbasetrainer import SupervisedBaseTrainer
 from erank.regularization import get_regularizer_class
 from erank.regularization.regularized_loss import RegularizedLoss
 from erank.regularization.subspace_regularizer import SubspaceRegularizer

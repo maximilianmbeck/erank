@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 from erank.data.basemetadataset import QUERY_X_KEY, QUERY_Y_KEY, SUPPORT_X_KEY, SUPPORT_Y_KEY, BaseMetaDataset, Task
 from ml_utilities.utils import convert_to_simple_str
-from ml_utilities.data_utils import Scaler
+from ml_utilities.data.data_utils import Scaler
 
 LOGGER = logging.getLogger(__name__)
 TASK_NAME_SEPARATOR = '#'

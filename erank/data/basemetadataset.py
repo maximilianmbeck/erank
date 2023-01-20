@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Tuple, Union
 from torch.utils.data import TensorDataset, IterableDataset, get_worker_info
 from matplotlib.figure import Figure
-from ml_utilities.data_utils import Scaler, DummyScaler, get_scaler
+from ml_utilities.data.data_utils import Scaler, DummyScaler, get_scaler
 
 LOGGER = logging.getLogger(__name__)
 
